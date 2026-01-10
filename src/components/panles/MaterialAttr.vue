@@ -2,6 +2,7 @@
   import { computed, reactive } from 'vue'
   import type { UploadFileInfo } from 'naive-ui'
   import { useSceneStore } from '@/stores/modules/useScene.store'
+  import { createDefaultMaterialData } from '@/utils/sceneFactory.ts'
   import type {
     MaterialData,
     MeshPhongMaterialData,
@@ -144,8 +145,23 @@
     updateMaterial({ [key]: value })
   }
 
+  function resetTextureUiState() {
+    Object.keys(textureFileNames).forEach((key) => delete textureFileNames[key])
+    Object.keys(textureFileLists).forEach((key) => delete textureFileLists[key])
+    Object.keys(uploadFileLists).forEach((key) => delete uploadFileLists[key])
+  }
+
   function updateMaterialType(value: string) {
-    updateMaterial({ type: value })
+    const nextType = value as MaterialData['type']
+    if (nextType === materialType.value) return
+    const id = sceneStore.selectedObjectId
+    if (!id) return
+    const currentMesh = sceneStore.cureentObjectData?.mesh
+    if (!currentMesh) return
+    const nextMaterial = createDefaultMaterialData(nextType)
+    const nextMesh = { ...currentMesh, material: nextMaterial }
+    sceneStore.updateSceneObjectData(id, { mesh: nextMesh } as any)
+    resetTextureUiState()
   }
 
   function updateMaterialTextureName(key: string, name: string) {
