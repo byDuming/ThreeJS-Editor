@@ -66,11 +66,17 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
     if (!camera.value) ensureCamera()
     if (!sceneStore.webGPURenderer || !sceneStore.threeScene || !camera.value) return
     sceneStore.webGPURenderer.setAnimationLoop(() => {
-      controls.value?.update()
-      if (transformControls.value?.object && !isInSceneGraph(transformControls.value.object)) {
-        transformControls.value.detach()
+      try {
+        
+        controls.value?.update()
+        if (transformControls.value?.object && !isInSceneGraph(transformControls.value.object)) {
+          transformControls.value.detach()
+        }
+        sceneStore.webGPURenderer!.render(sceneStore.threeScene!, camera.value!)
+      
+      } catch (error) {
+        
       }
-      sceneStore.webGPURenderer!.render(sceneStore.threeScene!, camera.value!)
     })
   }
 
