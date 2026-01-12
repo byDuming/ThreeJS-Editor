@@ -8,6 +8,8 @@ import Components from 'unplugin-vue-components/vite'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: '/3DWG-Engine/',   // 例如 /3DWG-Engine/
+  build: { outDir: 'dist' },
   plugins: [
     vue(),
     AutoImport({
