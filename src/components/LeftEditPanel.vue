@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { type TreeDropInfo, type TreeOption, NIcon, type DropdownOption, type UploadFileInfo } from 'naive-ui'
-  import { ref, computed, watch, watchEffect, h, type Component } from 'vue'
+  import { ref, computed, watch, h, type Component } from 'vue'
   import { Cube, OptionsSharp, CubeOutline, ColorPalette, Camera, Move, Resize, Earth, ArrowUndo, ArrowRedo, SettingsOutline, FolderOutline } from '@vicons/ionicons5'
   import { TextureOutlined, DeleteFilled, DriveFileRenameOutlineRound, LightbulbOutlined, Md3DRotationFilled, PlaceFilled } from '@vicons/material'
   import { Cubes } from '@vicons/fa'
@@ -36,9 +36,20 @@
   const uiEditorStore = useUiEditorStore()
 
   const treeData = ref<TreeOption[]>([])
-  watchEffect(() => {
-    treeData.value = sceneStore.getObjectTree()
-  })
+  // 彻底优化：使用防抖，避免频繁重建树结构导致卡顿
+  // 只有在用户停止操作一段时间后才更新树结构
+  let treeUpdateTimer: ReturnType<typeof setTimeout> | null = null
+  watch(() => sceneStore.objectDataList, () => {
+    // 清除之前的定时器
+    if (treeUpdateTimer) {
+      clearTimeout(treeUpdateTimer)
+    }
+    // 防抖：300ms 后才更新树结构
+    treeUpdateTimer = setTimeout(() => {
+      treeData.value = sceneStore.getObjectTree()
+      treeUpdateTimer = null
+    }, 300)
+  }, { flush: 'post', deep: false })
 
   // 下面内容与原 LeftEditPanle.vue 一致，仅命名规范化
 

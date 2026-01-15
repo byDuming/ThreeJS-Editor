@@ -29,7 +29,6 @@ export interface UploadAssetResult {
  */
 export class AssetApi {
   private static instance: AssetApi
-  private bucketInitialized = false
 
   private constructor() {}
 
@@ -84,7 +83,7 @@ export class AssetApi {
 
     try {
       // 上传文件到 Supabase Storage
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from(STORAGE_BUCKET)
         .upload(filePath, file, {
           cacheControl: '3600',
@@ -181,6 +180,10 @@ export class AssetApi {
       }
 
       const filePath = pathMatch[1]
+      if (!filePath) {
+        console.warn('无法从URL中提取文件路径:', asset.uri)
+        return false
+      }
 
       const { error } = await supabase.storage
         .from(STORAGE_BUCKET)
@@ -223,6 +226,9 @@ export class AssetApi {
       }
 
       const filePath = pathMatch[1]
+      if (!filePath) {
+        return null
+      }
 
       const { data, error } = await supabase.storage
         .from(STORAGE_BUCKET)
@@ -259,6 +265,9 @@ export class AssetApi {
       }
 
       const filePath = pathMatch[1]
+      if (!filePath) {
+        return false
+      }
 
       const { data, error } = await supabase.storage
         .from(STORAGE_BUCKET)
@@ -269,6 +278,9 @@ export class AssetApi {
       }
 
       const fileName = filePath.split('/').pop()
+      if (!fileName) {
+        return false
+      }
       return data?.some(file => file.name === fileName) ?? false
     } catch (error) {
       return false

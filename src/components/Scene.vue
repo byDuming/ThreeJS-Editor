@@ -12,6 +12,9 @@
    */
   const sceneStore = useSceneStore()
   const { container, initSceneBackground } = useRenderer()
+  // container 在模板中使用 ref="container"
+  // @ts-expect-error - container 在模板中使用，TypeScript 无法识别
+  void container
 
   // 监听 objectDataList 变化，当数据加载后同步到 three.js
   watch(() => sceneStore.objectDataList.length, async (length, oldLength) => {

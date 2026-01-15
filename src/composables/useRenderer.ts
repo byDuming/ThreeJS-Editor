@@ -422,11 +422,16 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
         if (controls.value) controls.value.enabled = !isDragging
         
         // 拖动结束时，提交最终的 transform 更新到 store
+        // 使用 setTimeout 异步执行，避免阻塞主线程导致 INP 延迟
         if (!isDragging && pendingTransformUpdate) {
-          sceneStore.updateSceneObjectData(pendingTransformUpdate.id, {
-            transform: pendingTransformUpdate.transform
-          })
+          const update = pendingTransformUpdate
           pendingTransformUpdate = null
+          // 异步执行，避免阻塞交互响应
+          setTimeout(() => {
+            sceneStore.updateSceneObjectData(update.id, {
+              transform: update.transform
+            })
+          }, 0)
         }
       })
       // 拖动过程中只缓存 transform，不立即更新 store（避免频繁 store 更新导致卡顿）

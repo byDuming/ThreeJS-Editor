@@ -33,6 +33,12 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build
+        env:
+          # 如果需要在 GitHub Pages 上使用云同步功能，需要在 GitHub Secrets 中配置
+          # 并在 Settings -> Secrets and variables -> Actions 中添加：
+          # VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: pnpm run build
 
       - uses: actions/configure-pages@v4

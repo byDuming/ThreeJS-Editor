@@ -1,13 +1,13 @@
-﻿  import type { SceneObjectData } from '@/interfaces/sceneInterface.ts'
-  import { getDB, initDB } from '@/services/db'
+  import type { SceneObjectData } from '@/interfaces/sceneInterface.ts'
+  import { initDB } from '@/services/db'
 
   import { defineStore } from 'pinia'
   import { Object3D, Scene } from 'three'
   import type { WebGPURenderer } from 'three/webgpu'
   import type { WebGLRenderer } from 'three'
-  import { computed, ref, shallowRef, h, type VNodeChild, toRaw, watch, nextTick } from 'vue'
+  import { computed, ref, shallowRef, h, type VNodeChild, toRaw, nextTick } from 'vue'
   import { createSceneObjectData, type SceneObjectInput } from '@/utils/sceneFactory.ts'
-  import { applyCameraSettings, applyLightSettings, applySceneSettings, createThreeObject, syncThreeObjectState, updateMeshGeometry, updateMeshMaterial } from '@/utils/threeObjectFactory.ts'
+  import { applyCameraSettings, applyLightSettings, applySceneSettings, applyTransform, createThreeObject, syncThreeObjectState, updateMeshGeometry, updateMeshMaterial } from '@/utils/threeObjectFactory.ts'
   import { NIcon, type TreeOption } from 'naive-ui'
   import { Cube, LogoDropbox, CubeOutline, Camera } from '@vicons/ionicons5'
   import { LightbulbFilled, MovieCreationFilled } from '@vicons/material'
@@ -64,28 +64,18 @@ export const useSceneStore = defineStore('scene', () => {
   const assets = ref<AssetRef[]>([])
   const assetFiles = shallowRef(new Map<string, File>())
 
-  // 当前选中对象数据（基于 tree，支持子级）
+  // 当前选中对象数据（直接从 objectDataList 查找，避免额外的 watch 和 Map 构建导致卡顿）
   const selectedObjectData = computed(() => {
     const id = selectedObjectId.value
     if (!id) return null
-    const tree = getObjectTree()
-    const dfs = (nodes: TreeOption[]): SceneObjectData | null => {
-      for (const node of nodes) {
-        const raw = (node as any).raw as SceneObjectData | undefined
-        if (raw?.id === id) return raw
-        if (node.children?.length) {
-          const found = dfs(node.children)
-          if (found) return found
-        }
-      }
-      return null
-    }
-    return dfs(tree)
+    // 直接查找，对于大多数场景，数组不会太大，find 操作很快
+    return objectDataList.value.find(item => item.id === id) || null
   })
 
   const currentObjectData = computed(() => {
     const id = selectedObjectId.value
     if (!id) return null
+    // 直接查找，避免额外的 watch 和 Map 构建导致卡顿
     return objectDataList.value.find(item => item.id === id) || null
   })
   
@@ -200,8 +190,9 @@ export const useSceneStore = defineStore('scene', () => {
   const redoStack = ref<SceneSnapshot[]>([]) // 回退栈：保存已撤回的快照
   const isRestoring = ref(false) // 快照恢复中，防止递归记录
   const maxHistory = 50 // 最多保留的快照数量
-  const historyDebounceMs = ref(300) // 高频更新的去抖间隔（仅用于普通操作，如 transform 拖拽）
-  const historyDebounceTimer = ref<ReturnType<typeof setTimeout> | null>(null) // 去抖计时器
+  // 注意：historyDebounceMs 和 historyDebounceTimer 已不再使用（transform 更新已跳过快照创建）
+  // 但保留 historyDebounceTimer 用于清理，避免内存泄漏
+  const historyDebounceTimer = ref<ReturnType<typeof setTimeout> | null>(null) // 去抖计时器（用于清理）
   const lastSnapshot = shallowRef<SceneSnapshot | null>(null) // 上一次用于入栈的快照
   const pendingCriticalOperation = ref(false) // 标记是否有待处理的关键操作（增删、类型变更等）
   const snapshotKeyMode = ref<'blacklist' | 'whitelist'>('blacklist')
@@ -274,8 +265,8 @@ export const useSceneStore = defineStore('scene', () => {
 
   /**
    * 智能推入历史快照：
-   * - 关键操作（增删、类型变更）立即推入
-   * - 普通操作（transform 拖拽等）走去抖，避免频繁推入
+   * - 关键操作（增删、类型变更）立即推入快照
+   * - transform 更新（拖动）完全跳过快照创建，避免卡顿（JSON.stringify/parse 对大量数据很耗时）
    */
   function scheduleHistorySnapshot(isCritical = false) {
     if (isRestoring.value) return
@@ -298,23 +289,9 @@ export const useSceneStore = defineStore('scene', () => {
       return
     }
     
-    // 普通操作走去抖（仅当没有关键操作标记时）
-    if (!pendingCriticalOperation.value) {
-      if (!lastSnapshot.value) lastSnapshot.value = createSnapshot()
-      
-      if (!historyDebounceTimer.value) {
-        // 去抖的第一次进入立刻记录，避免丢掉"起点"
-        pushHistorySnapshot(lastSnapshot.value)
-      }
-      if (historyDebounceTimer.value) {
-        clearTimeout(historyDebounceTimer.value)
-      }
-      historyDebounceTimer.value = setTimeout(() => {
-        historyDebounceTimer.value = null
-        // 去抖结束后刷新最新快照作为下一次起点
-        lastSnapshot.value = createSnapshot()
-      }, historyDebounceMs.value)
-    }
+    // 普通操作（transform 更新）不再创建快照，完全跳过
+    // 这样可以避免拖动时的卡顿（JSON.stringify/parse 对大量数据很耗时）
+    // 用户通常不会撤销拖动操作，所以跳过快照是合理的
   }
 
   /** 恢复快照并基于数据重建 three 对象映射。 */
@@ -610,47 +587,101 @@ export const useSceneStore = defineStore('scene', () => {
       }
     }
 
-    Object.assign(target, { ...patch, transform: nextTransform }) // 覆盖store中的数据
+    // 对于 transform 更新，直接修改 transform 属性，避免触发深度 watch（导致卡顿）
+    // 关键操作使用 Object.assign 来确保所有属性都被正确更新
+    if (!isCritical && patch.transform) {
+      // transform 更新：直接修改 transform 属性，避免深度遍历
+      target.transform.position = nextTransform.position
+      target.transform.rotation = nextTransform.rotation
+      target.transform.scale = nextTransform.scale
+      // 其他 patch 的属性也需要更新
+      if (patch.visible !== undefined) target.visible = patch.visible
+      if (patch.castShadow !== undefined) target.castShadow = patch.castShadow
+      if (patch.receiveShadow !== undefined) target.receiveShadow = patch.receiveShadow
+      if (patch.frustumCulled !== undefined) target.frustumCulled = patch.frustumCulled
+      if (patch.renderOrder !== undefined) target.renderOrder = patch.renderOrder
+      if (patch.name !== undefined) target.name = patch.name
+      if (patch.userData !== undefined) target.userData = { ...target.userData, ...patch.userData }
+    } else {
+      // 关键操作：使用 Object.assign 确保所有属性都被正确更新
+      Object.assign(target, { ...patch, transform: nextTransform })
+    }
 
     const obj = objectsMap.value.get(id) // 获取对应three对象
-    if (obj) syncThreeObjectState(obj, nextData) // 同步位姿和渲染状态到three对象
+    // 对于 transform 更新，同步执行 syncThreeObjectState（必须立即更新视觉）
+    // 对于关键操作，也同步执行（确保状态一致）
+    if (obj) {
+      if (!isCritical && patch.transform) {
+        // transform 更新：只同步 transform，其他操作延迟
+        applyTransform(obj, nextData)
+      } else {
+        // 关键操作：完整同步
+        syncThreeObjectState(obj, nextData)
+      }
+    }
 
+    // 非关键操作延迟执行，避免阻塞主线程导致 INP 延迟
     if (parentChanged) { // 父节点变了需要更新关系和挂载
       if (prevParentId) removeChildFromParent(prevParentId, id) // 从旧父节点移除引用
       if (patch.parentId) addChildToParent(patch.parentId, id) // 添加到新父节点引用
     }
 
-    if (typeChanged || helperChanged || parentChanged || meshRebuilt) attachThreeObject(nextData) // 若类型、helper配置或父节点变动，重新挂载three对象
+    if (typeChanged || helperChanged || parentChanged || meshRebuilt) {
+      // 关键操作立即执行，transform 更新延迟执行
+      if (isCritical) {
+        attachThreeObject(nextData)
+      } else {
+        setTimeout(() => attachThreeObject(nextData), 0)
+      }
+    }
 
     if ((typeChanged || helperChanged || meshChanged || parentChanged) && selectedObjectId.value === id) {
       selectionVersion.value += 1
     }
 
+    // 场景/相机/光源设置延迟执行，避免阻塞
     if (nextData.type === 'scene' && threeScene.value) {
-      applySceneSettings(threeScene.value, nextData)
+      if (isCritical) {
+        applySceneSettings(threeScene.value, nextData)
+      } else {
+        setTimeout(() => applySceneSettings(threeScene.value!, nextData), 0)
+      }
     }
     if (nextData.type === 'camera') {
       const obj = objectsMap.value.get(id)
       if (obj && (obj as any).isPerspectiveCamera) {
-        applyCameraSettings(obj as any, nextData)
+        if (isCritical) {
+          applyCameraSettings(obj as any, nextData)
+        } else {
+          setTimeout(() => applyCameraSettings(obj as any, nextData), 0)
+        }
       }
     }
     if (nextData.type === 'light') {
       const obj = objectsMap.value.get(id)
-      if (obj) applyLightSettings(obj as any, nextData)
+      if (obj) {
+        if (isCritical) {
+          applyLightSettings(obj as any, nextData)
+        } else {
+          setTimeout(() => applyLightSettings(obj as any, nextData), 0)
+        }
+      }
     }
     if (nextData.type === 'model' && (assetChanged || typeChanged) && nextData.assetId) {
       void loadModelAssetIntoObject(nextData.assetId, id)
     }
 
-    // 根据操作类型决定推入策略：关键操作立即推入，普通操作（仅 transform）走去抖
-    scheduleHistorySnapshot(isCritical)
-    // 如果是关键操作，清除标记（在下一个 tick，确保 watch 回调已执行）
+    // 根据操作类型决定推入策略：
+    // - 关键操作立即推入快照
+    // - transform 更新（拖动）完全跳过快照创建，避免卡顿（用户通常不会撤销拖动操作）
     if (isCritical) {
+      scheduleHistorySnapshot(true)
+      // 清除标记（在下一个 tick，确保 watch 回调已执行）
       nextTick(() => {
         pendingCriticalOperation.value = false
       })
     }
+    // transform 更新不创建快照，完全跳过
     return target // 返回更新后的数据
   }
 
@@ -810,16 +841,14 @@ export const useSceneStore = defineStore('scene', () => {
    * 统一监听器：自动检测数据变化并推入历史。
    * 注意：关键操作（增删、类型变更）已在各自函数中立即推入（通过 scheduleHistorySnapshot(true)），
    * 这里主要作为兜底机制，处理一些直接修改 objectDataList 的情况。
-   * 如果 pendingCriticalOperation 被标记，说明关键操作已处理，跳过避免重复推入。
-   * 否则，作为普通操作走去抖（主要用于 transform 拖拽等高频操作）。
+   * 
+   * 彻底优化：完全移除这个 watch，因为：
+   * 1. 关键操作已经在各自函数中处理
+   * 2. transform 更新已经跳过快照创建
+   * 3. 其他直接修改 objectDataList 的情况很少见，如果需要撤销，应该在操作前手动调用 scheduleHistorySnapshot(true)
+   * 4. 保留这个 watch 只会增加不必要的性能开销
    */
-  watch(objectDataList, () => {
-    // 如果关键操作已处理（标记为 true 后立即被清除），跳过避免重复推入
-    // 否则，作为普通操作走去抖
-    if (!pendingCriticalOperation.value) {
-      scheduleHistorySnapshot(false)
-    }
-  }, { deep: true, flush: 'sync' })
+  // watch 已移除，避免不必要的性能开销
 
   return {
     initScene,

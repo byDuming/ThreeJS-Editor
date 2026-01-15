@@ -23,7 +23,7 @@ export async function testSupabaseConnection() {
 
   // 测试 2: 检查连接
   try {
-    const { data, error } = await supabase.from('scenes').select('count').limit(1)
+    const { error } = await supabase.from('scenes').select('count').limit(1)
     if (error) {
       // 如果表不存在，这是预期的
       if (error.code === '42P01') {

@@ -8,8 +8,14 @@ import Components from 'unplugin-vue-components/vite'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/3DWG-Engine/',   // 例如 /3DWG-Engine/
-  build: { outDir: 'dist' },
+  base: '/3DWG-Engine/',   // GitHub Pages 仓库名称
+  build: { 
+    outDir: 'dist',
+    // 确保构建产物正确
+    assetsDir: 'assets',
+    // 启用 sourcemap（可选，用于调试）
+    sourcemap: false,
+  },
   plugins: [
     vue(),
     AutoImport({

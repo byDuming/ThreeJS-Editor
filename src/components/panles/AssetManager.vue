@@ -54,7 +54,7 @@
     uploading.value = true
     try {
       // 上传到云端
-      const asset = await sceneStore.uploadAsset(file, 'model', sceneStore.currentSceneId)
+      await sceneStore.uploadAsset(file, 'model', sceneStore.currentSceneId)
       message.success(`模型 "${file.name}" 上传成功`)
     } catch (error: any) {
       console.error('上传模型失败:', error)
