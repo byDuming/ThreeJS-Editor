@@ -1,4 +1,4 @@
-export type AssetType = 'model' | 'texture' | 'image'
+export type AssetType = 'model' | 'texture' | 'image' | 'material' | 'hdri'
 export type AssetSource = 'local' | 'remote'
 
 export type AssetRef = {

@@ -7,7 +7,6 @@
   import {
     CloudUploadOutline,
     AddOutline,
-    ImageOutline,
     ChevronDownOutline,
     ChevronUpOutline,
     CubeOutline,
@@ -39,8 +38,8 @@
   ]
 
   // 当前类别配置
-  const currentCategory = computed(() => {
-    return categories.find(c => c.key === uiEditorStore.activeAssetCategory) || categories[0]
+  const currentCategory = computed((): { key: AssetCategory; label: string; icon: any; accept: string; description: string } => {
+    return categories.find(c => c.key === uiEditorStore.activeAssetCategory) ?? categories[0]!
   })
 
   // 根据类别筛选资产
