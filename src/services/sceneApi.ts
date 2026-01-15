@@ -36,6 +36,7 @@ export interface UpdateSceneParams {
   objectDataList?: SceneObjectData[]
   assets?: AssetRef[]
   rendererSettings?: Record<string, unknown>
+  thumbnail?: string
 }
 
 /**
@@ -104,7 +105,7 @@ export class SceneApi {
           version: scene.version,
           updatedAt: scene.updatedAt,
           createdAt: scene.createdAt,
-          thumbnail: undefined
+          thumbnail: scene.thumbnail
         }))
       } catch (error: any) {
         console.warn('从云端获取场景列表失败，回退到本地:', error.message)
@@ -200,6 +201,7 @@ export class SceneApi {
             row.objectDataList = JSON.stringify(scene.objectDataList)
             row.assets = JSON.stringify(scene.assets || [])
             row.rendererSettings = JSON.stringify(scene.rendererSettings || {})
+            row.thumbnail = scene.thumbnail
             row.updatedAt = scene.updatedAt
             row.createdAt = scene.createdAt
             return row
@@ -216,6 +218,7 @@ export class SceneApi {
             objectDataList: JSON.stringify(scene.objectDataList),
             assets: JSON.stringify(scene.assets || []),
             rendererSettings: JSON.stringify(scene.rendererSettings || {}),
+            thumbnail: scene.thumbnail,
             updatedAt: scene.updatedAt,
             createdAt: scene.createdAt
           }
@@ -354,6 +357,7 @@ export class SceneApi {
             objectDataList,
             assets,
             rendererSettings,
+            thumbnail: cloudScene.thumbnail,
             updatedAt: new Date(cloudScene.updated_at),
             createdAt: new Date(cloudScene.created_at)
           }
@@ -421,6 +425,7 @@ export class SceneApi {
       objectDataList: params.objectDataList ?? currentScene.objectDataList,
       assets: params.assets ?? currentScene.assets,
       rendererSettings: params.rendererSettings ?? currentScene.rendererSettings,
+      thumbnail: params.thumbnail !== undefined ? params.thumbnail : currentScene.thumbnail,
       updatedAt: new Date()
     }
 
@@ -451,6 +456,7 @@ export class SceneApi {
             objectDataList,
             assets,
             rendererSettings,
+            thumbnail: cloudScene.thumbnail,
             updatedAt: new Date(cloudScene.updated_at),
             createdAt: new Date(cloudScene.created_at)
           }
@@ -479,6 +485,7 @@ export class SceneApi {
         row.objectDataList = JSON.stringify(updatedScene.objectDataList)
         row.assets = JSON.stringify(updatedScene.assets || [])
         row.rendererSettings = JSON.stringify(updatedScene.rendererSettings || {})
+        row.thumbnail = updatedScene.thumbnail
         row.updatedAt = updatedScene.updatedAt
         return row
       }
@@ -500,6 +507,7 @@ export class SceneApi {
     objectDataList: SceneObjectData[]
     assets: AssetRef[]
     rendererSettings: Record<string, unknown>
+    thumbnail?: string
   }): Promise<SceneRow | null> {
     return this.updateScene({
       id,
@@ -508,7 +516,8 @@ export class SceneApi {
       version: sceneData.version,
       objectDataList: sceneData.objectDataList,
       assets: sceneData.assets,
-      rendererSettings: sceneData.rendererSettings
+      rendererSettings: sceneData.rendererSettings,
+      thumbnail: sceneData.thumbnail
     })
   }
 

@@ -10,6 +10,7 @@ export type SceneRow = {
   objectDataList: SceneObjectData[]
   assets?: AssetRef[]
   rendererSettings?: Record<string, unknown>
+  thumbnail?: string // 缩略图 URL
   updatedAt: Date
   createdAt: Date
 }

@@ -17,6 +17,7 @@
   import type { AssetRef } from '@/types/asset'
   import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
   import { assetApi } from '@/services/assetApi'
+  import { HistoryManager, AddObjectCommand, RemoveObjectCommand, UpdateTransformCommand, UpdateObjectCommand, UndoGroup } from '@/utils/commandPattern'
 
   /**
    * 场景编辑核心 Store：
@@ -63,6 +64,14 @@ export const useSceneStore = defineStore('scene', () => {
   })
   const assets = ref<AssetRef[]>([])
   const assetFiles = shallowRef(new Map<string, File>())
+  
+  // 截图函数引用（由 useRenderer 设置）
+  const captureScreenshotFn = shallowRef<((width?: number, height?: number) => Promise<Blob>) | null>(null)
+  
+  // 设置截图函数
+  function setCaptureScreenshotFn(fn: ((width?: number, height?: number) => Promise<Blob>) | null) {
+    captureScreenshotFn.value = fn
+  }
 
   // 当前选中对象数据（直接从 objectDataList 查找，避免额外的 watch 和 Map 构建导致卡顿）
   const selectedObjectData = computed(() => {
@@ -81,6 +90,9 @@ export const useSceneStore = defineStore('scene', () => {
   
   const transformMode = ref<'translate' | 'rotate' | 'scale'>('translate');
   const transformSpace = ref<'world' | 'local'>('world');
+  
+  // 场景是否加载完成（用于控制撤销/重做按钮的可用状态）
+  const isSceneReady = ref(false);
 
   function getAssetById(id: string) {
     return assets.value.find(asset => asset.id === id) ?? null
@@ -186,10 +198,43 @@ export const useSceneStore = defineStore('scene', () => {
   }
 
   // ---------- 撤销 / 重做历史快照 ----------
+  // 新的命令模式历史管理器（推荐使用）
+  const historyManager = new HistoryManager()
+  // 响应式版本号，用于触发 UI 更新（当历史栈变化时更新）
+  const historyVersion = ref(0)
+  // 旧的快照机制（保留作为后备，向后兼容）
   const undoStack = ref<SceneSnapshot[]>([]) // 撤回栈：保存历史快照
   const redoStack = ref<SceneSnapshot[]>([]) // 回退栈：保存已撤回的快照
   const isRestoring = ref(false) // 快照恢复中，防止递归记录
   const maxHistory = 50 // 最多保留的快照数量
+  const useCommandPattern = ref(true) // 是否使用命令模式（默认开启）
+  
+  // 计算属性：是否可以撤销/重做（响应式）
+  // 注意：依赖 historyVersion 来触发响应式更新
+  // 场景未加载完成时，不响应撤销/重做
+  const canUndo = computed(() => {
+    // 场景未准备好时，不允许撤销
+    if (!isSceneReady.value) return false
+    // 读取 historyVersion 以建立响应式依赖
+    void historyVersion.value
+    if (useCommandPattern.value) {
+      return historyManager.canUndo()
+    } else {
+      return undoStack.value.length > 0
+    }
+  })
+  
+  const canRedo = computed(() => {
+    // 场景未准备好时，不允许重做
+    if (!isSceneReady.value) return false
+    // 读取 historyVersion 以建立响应式依赖
+    void historyVersion.value
+    if (useCommandPattern.value) {
+      return historyManager.canRedo()
+    } else {
+      return redoStack.value.length > 0
+    }
+  })
   // 注意：historyDebounceMs 和 historyDebounceTimer 已不再使用（transform 更新已跳过快照创建）
   // 但保留 historyDebounceTimer 用于清理，避免内存泄漏
   const historyDebounceTimer = ref<ReturnType<typeof setTimeout> | null>(null) // 去抖计时器（用于清理）
@@ -321,23 +366,52 @@ export const useSceneStore = defineStore('scene', () => {
 
   /** 撤回到上一条快照。 */
   function undo() {
-    const snapshot = undoStack.value.pop()
-    if (!snapshot) return
-    // 撤回前先把当前状态塞到回退栈
-    redoStack.value.push(createSnapshot())
-    applySnapshot(snapshot)
+    // 使用 canUndo 判断（已包含 isSceneReady 和历史栈检查）
+    if (!canUndo.value) return
+    
+    if (useCommandPattern.value) {
+      // 使用命令模式
+      const success = historyManager.undo()
+      if (success) {
+        // 更新版本号，触发响应式更新
+        historyVersion.value++
+      }
+    } else {
+      // 使用旧的快照机制（向后兼容）
+      const snapshot = undoStack.value.pop()
+      if (!snapshot) return
+      // 撤回前先把当前状态塞到回退栈
+      redoStack.value.push(createSnapshot())
+      applySnapshot(snapshot)
+    }
   }
 
   /** 回退到下一条快照。 */
   function redo() {
-    const snapshot = redoStack.value.pop()
-    if (!snapshot) return
-    // 回退前先把当前状态塞到撤回栈
-    undoStack.value.push(createSnapshot())
-    applySnapshot(snapshot)
+    // 使用 canRedo 判断（已包含 isSceneReady 和历史栈检查）
+    if (!canRedo.value) return
+    
+    if (useCommandPattern.value) {
+      // 使用命令模式
+      const success = historyManager.redo()
+      if (success) {
+        // 更新版本号，触发响应式更新
+        historyVersion.value++
+      }
+    } else {
+      // 使用旧的快照机制（向后兼容）
+      const snapshot = redoStack.value.pop()
+      if (!snapshot) return
+      // 回退前先把当前状态塞到撤回栈
+      undoStack.value.push(createSnapshot())
+      applySnapshot(snapshot)
+    }
   }
 
   async function initScene() {
+    // 场景开始加载，标记为未准备好
+    isSceneReady.value = false
+    
     const { sceneData } = await initDB() // 初始化数据库并获取场景数据
     name.value = sceneData.name // store 名称
     version.value = sceneData.version // store 版本
@@ -355,6 +429,9 @@ export const useSceneStore = defineStore('scene', () => {
     setThreeScene(scene)
     isRestoring.value = false
 
+    // 清空历史栈（新的命令模式和旧的快照模式都清空）
+    historyManager.clear()
+    historyVersion.value++
     undoStack.value = []
     redoStack.value = []
     lastSnapshot.value = createSnapshot()
@@ -362,6 +439,9 @@ export const useSceneStore = defineStore('scene', () => {
       clearTimeout(historyDebounceTimer.value)
       historyDebounceTimer.value = null
     }
+    
+    // 场景加载完成，标记为准备好
+    isSceneReady.value = true
   }
 
   // 获取树形结构（用于层级面板），返回 TreeOption[]
@@ -430,7 +510,7 @@ export const useSceneStore = defineStore('scene', () => {
   /**
    * 将层级面板的树形数据反写到 store，保持 objectDataList/three 场景同步
    */
-  function applyObjectTree(tree: TreeOption[]) {
+  function applyObjectTree(tree: TreeOption[], options?: { skipHistory?: boolean }) {
     const nextList: SceneObjectData[] = []
     const dfs = (nodes: TreeOption[], parentId?: string) => {
       nodes.forEach(node => {
@@ -446,6 +526,45 @@ export const useSceneStore = defineStore('scene', () => {
       })
     }
     dfs(tree)
+    
+    // 检测 parentId 变化并记录历史（在更新数据之前）
+    // 只记录被移动对象的 parentId 变化，不记录父节点的 childrenIds 变化
+    // （updateSceneObjectData 会自动处理父节点的 childrenIds 更新）
+    const currentMap = new Map(objectDataList.value.map(item => [item.id, item]))
+    const parentIdChanges: Array<{ id: string; prevParentId?: string; newParentId?: string }> = []
+    
+    nextList.forEach(item => {
+      const current = currentMap.get(item.id)
+      if (current && current.parentId !== item.parentId) {
+        parentIdChanges.push({
+          id: item.id,
+          prevParentId: current.parentId,
+          newParentId: item.parentId
+        })
+      }
+    })
+    
+    // 如果有 parentId 变化且需要记录历史
+    if (parentIdChanges.length > 0 && !options?.skipHistory && useCommandPattern.value) {
+      const getStoreRef = () => useSceneStore()
+      const group = new UndoGroup('调整层级结构')
+      
+      parentIdChanges.forEach(change => {
+        // 只记录 parentId 的变化
+        const prevData: Partial<SceneObjectData> = { parentId: change.prevParentId }
+        const newData: Partial<SceneObjectData> = { parentId: change.newParentId }
+        
+        const command = new UpdateObjectCommand(getStoreRef, change.id, newData, prevData)
+        group.addCommand(command)
+      })
+      
+      if (!group.isEmpty()) {
+        historyManager.pushCommand(group)
+        historyVersion.value++
+      }
+    }
+    
+    // 应用变化
     objectDataList.value = nextList
     nextList.forEach(item => attachThreeObject(item))
   }
@@ -511,18 +630,42 @@ export const useSceneStore = defineStore('scene', () => {
     if (!obj) return
     if (obj.parent) obj.parent.remove(obj)
 
-    const parent = data.parentId && data.parentId !== 'Scene' ? objectsMap.value.get(data.parentId) : threeScene.value
+    // 处理 parentId：undefined/null 表示 Scene 根节点，其他值表示父对象
+    // 注意：data.parentId 可能是 undefined（Scene 根节点）、null、或对象 ID
+    const parent = (data.parentId !== undefined && data.parentId !== null && data.parentId !== 'Scene') 
+      ? objectsMap.value.get(data.parentId) 
+      : threeScene.value
     parent?.add(obj)
   }
 
   // ---------- 对象增删改查与 three 同步 ----------
 
   // 新增场景对象（含 three 层同步）
-  function addSceneObjectData(input: SceneObjectInput, options?: { addToThree?: boolean }) {
+  function addSceneObjectData(input: SceneObjectInput, options?: { addToThree?: boolean; skipHistory?: boolean }) {
     const id = input.id ?? `obj-${aIds.value++}`;
+    
+    // 检查对象是否已存在（避免重复添加，但在命令执行时允许覆盖）
+    const existing = objectDataList.value.find(item => item.id === id)
+    if (existing && !options?.skipHistory) {
+      // 只有在非命令执行时（正常添加）才跳过
+      return existing
+    }
+    
+    // 如果对象已存在且是命令执行（skipHistory=true），先删除旧对象
+    if (existing && options?.skipHistory) {
+      const existingIndex = objectDataList.value.findIndex(item => item.id === id)
+      if (existingIndex >= 0) {
+        objectDataList.value.splice(existingIndex, 1)
+      }
+      const oldObj = objectsMap.value.get(id)
+      if (oldObj?.parent) {
+        oldObj.parent.remove(oldObj)
+      }
+      objectsMap.value.delete(id)
+    }
+    
     const newObj = createSceneObjectData({ ...input, id });
     objectDataList.value.push(newObj);
-    
 
     if (newObj.parentId) {
       addChildToParent(newObj.parentId, id);
@@ -533,25 +676,73 @@ export const useSceneStore = defineStore('scene', () => {
       const obj3d = createThreeObject(newObj, { objectsMap: objectsMap.value });
       objectsMap.value.set(id, obj3d);
       attachThreeObject(newObj);// 挂载到 three 层
+      
+      // 如果是模型对象且有 assetId，加载模型资源
+      if (newObj.type === 'model' && newObj.assetId) {
+        void loadModelAssetIntoObject(newObj.assetId, id)
+      }
     }
 
-    // 新增对象是关键操作，立即推入历史
-    scheduleHistorySnapshot(true)
-    // 清除关键操作标记（在下一个 tick，确保 watch 回调已执行）
-    nextTick(() => {
-      pendingCriticalOperation.value = false
-    })
+    // 推入历史记录
+    if (!options?.skipHistory) {
+      if (useCommandPattern.value) {
+        // 使用命令模式
+        const getStoreRef = () => useSceneStore()
+        const clonedData = JSON.parse(JSON.stringify(newObj))
+        const command = new AddObjectCommand(getStoreRef, clonedData)
+        historyManager.pushCommand(command)
+        // 更新版本号，触发响应式更新
+        historyVersion.value++
+      } else {
+        // 使用旧的快照机制
+        scheduleHistorySnapshot(true)
+        nextTick(() => {
+          pendingCriticalOperation.value = false
+        })
+      }
+    }
     return newObj;
   }
 
   // 更新场景对象（含 three 层同步）
-  function updateSceneObjectData(id: string, patch: Partial<SceneObjectData>) {
+  function updateSceneObjectData(id: string, patch: Partial<SceneObjectData>, options?: { skipHistory?: boolean }) {
     const target = objectDataList.value.find(item => item.id === id) // 找到要更新的原始数据
     if (!target) return null // 如果不存在直接返回
 
+    // 【重要】在更新之前保存旧状态，用于撤销命令
+    const prevTransform = JSON.parse(JSON.stringify(target.transform))
     const prevParentId = target.parentId // 记录旧父节点用于后续判断
+    // 保存 patch 中涉及的字段的初始值（用于 UpdateObjectCommand 撤销）
+    // 注意：即使值是 undefined，也要保存（用于恢复 parentId: undefined 的情况）
+    const prevData: Partial<SceneObjectData> = {}
+    Object.keys(patch).forEach(key => {
+      const k = key as keyof SceneObjectData
+      // 使用 'in' 操作符检查属性是否存在，而不是检查值是否为 undefined
+      if (k in target) {
+        const value = (target as any)[k]
+        // 对于对象和数组，使用深拷贝；对于 undefined，直接保存
+        if (value !== undefined && value !== null && typeof value === 'object' && !Array.isArray(value)) {
+          ;(prevData as any)[k] = JSON.parse(JSON.stringify(value))
+        } else {
+          ;(prevData as any)[k] = value
+        }
+      }
+    })
+    
     const nextTransform = patch.transform ? { ...target.transform, ...patch.transform } : target.transform // 合并transform
-    const nextData: SceneObjectData = { ...target, ...patch, transform: nextTransform } // 组装最新的完整数据
+    // 组装最新的完整数据，注意：展开运算符会忽略 undefined，所以需要显式处理
+    const nextData = { ...target, transform: nextTransform } as SceneObjectData
+    // 显式复制所有 patch 中的属性，包括 undefined
+    // 使用 Object.defineProperty 或直接赋值来确保 undefined 值也被设置
+    Object.keys(patch).forEach(key => {
+      const value = (patch as any)[key]
+      // 直接赋值，确保 undefined 值也被设置
+      ;(nextData as any)[key] = value
+    })
+    // 特别处理 parentId，确保即使值是 undefined 也被正确设置
+    if ('parentId' in patch) {
+      nextData.parentId = patch.parentId
+    }
 
     const typeChanged = patch.type !== undefined && patch.type !== target.type // 判断类型是否变化
     const helperChanged = patch.helper !== undefined && target.type === 'helper'
@@ -561,7 +752,8 @@ export const useSceneStore = defineStore('scene', () => {
       && patch.userData !== undefined
       && (patch.userData as any)?.lightType !== (target.userData as any)?.lightType
     const assetChanged = patch.assetId !== undefined && patch.assetId !== target.assetId
-    const parentChanged = patch.parentId !== undefined && patch.parentId !== prevParentId
+    // 检查 parentId 是否在 patch 中（包括 undefined，表示要清除 parentId）
+    const parentChanged = 'parentId' in patch && patch.parentId !== prevParentId
     
     // 判断是否为关键操作：类型变更、helper变更、光源类型变更、父节点变更、资产变更
     // 仅 transform 更新（拖拽）视为普通操作，走去抖
@@ -604,7 +796,17 @@ export const useSceneStore = defineStore('scene', () => {
       if (patch.userData !== undefined) target.userData = { ...target.userData, ...patch.userData }
     } else {
       // 关键操作：使用 Object.assign 确保所有属性都被正确更新
-      Object.assign(target, { ...patch, transform: nextTransform })
+      // 注意：展开运算符会忽略 undefined 值，所以需要显式处理
+      const updatePatch: any = { transform: nextTransform }
+      // 显式复制所有 patch 中的属性，包括 undefined
+      Object.keys(patch).forEach(key => {
+        updatePatch[key] = (patch as any)[key]
+      })
+      Object.assign(target, updatePatch)
+      // 特别处理 parentId，确保即使值是 undefined 也被正确设置
+      if ('parentId' in patch) {
+        target.parentId = patch.parentId
+      }
     }
 
     const obj = objectsMap.value.get(id) // 获取对应three对象
@@ -622,8 +824,14 @@ export const useSceneStore = defineStore('scene', () => {
 
     // 非关键操作延迟执行，避免阻塞主线程导致 INP 延迟
     if (parentChanged) { // 父节点变了需要更新关系和挂载
-      if (prevParentId) removeChildFromParent(prevParentId, id) // 从旧父节点移除引用
-      if (patch.parentId) addChildToParent(patch.parentId, id) // 添加到新父节点引用
+      // 从旧父节点移除引用（prevParentId 可能是 undefined，表示之前是 Scene 根节点）
+      if (prevParentId !== undefined && prevParentId !== null) {
+        removeChildFromParent(prevParentId, id)
+      }
+      // 添加到新父节点引用（patch.parentId 可能是 undefined，表示要移到 Scene 根节点）
+      if (patch.parentId !== undefined && patch.parentId !== null) {
+        addChildToParent(patch.parentId, id)
+      }
     }
 
     if (typeChanged || helperChanged || parentChanged || meshRebuilt) {
@@ -671,23 +879,53 @@ export const useSceneStore = defineStore('scene', () => {
       void loadModelAssetIntoObject(nextData.assetId, id)
     }
 
-    // 根据操作类型决定推入策略：
-    // - 关键操作立即推入快照
-    // - transform 更新（拖动）完全跳过快照创建，避免卡顿（用户通常不会撤销拖动操作）
-    if (isCritical) {
-      scheduleHistorySnapshot(true)
-      // 清除标记（在下一个 tick，确保 watch 回调已执行）
-      nextTick(() => {
-        pendingCriticalOperation.value = false
-      })
+    // 推入历史记录
+    if (!options?.skipHistory) {
+      if (useCommandPattern.value) {
+        // 使用命令模式
+        const getStoreRef = () => useSceneStore()
+        if (!isCritical && patch.transform) {
+          // Transform 更新，使用可合并的命令
+          // 传入 prevTransform（更新前保存的状态）以确保撤销正确
+          const command = new UpdateTransformCommand(getStoreRef, id, nextTransform, prevTransform)
+          historyManager.pushCommand(command)
+          historyVersion.value++
+        } else if (isCritical) {
+          // 关键操作，使用普通更新命令
+          // 传入 prevData（更新前保存的状态）以确保撤销正确
+          const command = new UpdateObjectCommand(getStoreRef, id, patch, prevData)
+          historyManager.pushCommand(command)
+          historyVersion.value++
+        }
+        // transform 更新（非关键）在命令模式中也会记录，支持撤销
+      } else {
+        // 使用旧的快照机制
+        // - 关键操作立即推入快照
+        // - transform 更新（拖动）完全跳过快照创建，避免卡顿
+        if (isCritical) {
+          scheduleHistorySnapshot(true)
+          // 清除标记（在下一个 tick，确保 watch 回调已执行）
+          nextTick(() => {
+            pendingCriticalOperation.value = false
+          })
+        }
+        // transform 更新不创建快照，完全跳过
+      }
     }
-    // transform 更新不创建快照，完全跳过
     return target // 返回更新后的数据
   }
 
   // 删除场景对象（默认递归删除子级，同时清理 three 层）
-  function removeSceneObjectData(id: string, options?: { removeChildren?: boolean }) {
+  function removeSceneObjectData(id: string, options?: { removeChildren?: boolean; skipHistory?: boolean }) {
     const removeChildren = options?.removeChildren ?? true
+    
+    // 【重要】先创建命令（在删除对象之前），保存对象数据用于撤销
+    let command: RemoveObjectCommand | null = null
+    if (!options?.skipHistory && useCommandPattern.value) {
+      const getStoreRef = () => useSceneStore()
+      command = new RemoveObjectCommand(getStoreRef, id)
+    }
+    
     const idsToRemove = new Set<string>()
 
     const collect = (targetId: string) => {
@@ -713,7 +951,9 @@ export const useSceneStore = defineStore('scene', () => {
 
     idsToRemove.forEach(removeId => {
       const obj = objectsMap.value.get(removeId)
-      if (obj?.parent) obj.parent.remove(obj)
+      if (obj?.parent) {
+        obj.parent.remove(obj)
+      }
       objectsMap.value.delete(removeId)
     })
 
@@ -723,12 +963,21 @@ export const useSceneStore = defineStore('scene', () => {
       selectedObjectId.value = null
     }
 
-    // 删除对象是关键操作，立即推入历史
-    scheduleHistorySnapshot(true)
-    // 清除关键操作标记（在下一个 tick，确保 watch 回调已执行）
-    nextTick(() => {
-      pendingCriticalOperation.value = false
-    })
+    // 推入历史记录（命令已在删除前创建）
+    if (!options?.skipHistory) {
+      if (useCommandPattern.value && command) {
+        // 使用命令模式
+        historyManager.pushCommand(command)
+        historyVersion.value++
+      } else if (!useCommandPattern.value) {
+        // 使用旧的快照机制
+        scheduleHistorySnapshot(true)
+        // 清除关键操作标记（在下一个 tick，确保 watch 回调已执行）
+        nextTick(() => {
+          pendingCriticalOperation.value = false
+        })
+      }
+    }
   }
 
   // function disposeMaterial(material: any, disposedMaterials: Set<unknown>, disposedTextures: Set<unknown>) {
@@ -814,13 +1063,42 @@ export const useSceneStore = defineStore('scene', () => {
     // 使用 sceneApi 保存，优先保存到云端
     const { sceneApi } = await import('@/services/sceneApi')
     try {
+      // 尝试截取场景截图并上传
+      let thumbnailUrl: string | undefined = undefined
+      try {
+        if (captureScreenshotFn.value) {
+          // 使用 useRenderer 提供的截图函数（在渲染循环中截图，确保正确的摄像机和时机）
+          const screenshotBlob = await captureScreenshotFn.value(800, 600)
+          
+          // 转换为 File 对象
+          const { blobToFile } = await import('@/utils/screenshot')
+          const screenshotFile = blobToFile(screenshotBlob, `scene-${targetId}-thumbnail.png`)
+          
+          // 上传到云存储
+          const { assetApi } = await import('@/services/assetApi')
+          if (assetApi.isStorageAvailable()) {
+            const result = await uploadAsset(screenshotFile, 'image', targetId)
+            thumbnailUrl = result.uri
+            console.log('✅ 场景截图已上传:', thumbnailUrl)
+          } else {
+            console.warn('云存储未配置，跳过截图上传')
+          }
+        } else {
+          console.warn('截图函数未初始化，跳过截图')
+        }
+      } catch (error: any) {
+        // 截图失败不影响保存，只记录警告
+        console.warn('截取场景截图失败:', error)
+      }
+      
       await sceneApi.saveScene(targetId, {
         name: name.value,
         aIds: aIds.value,
         version: version.value,
         objectDataList: objectDataList.value,
         assets: assets.value,
-        rendererSettings: rendererSettings.value
+        rendererSettings: rendererSettings.value,
+        thumbnail: thumbnailUrl
       })
       
       notification.value!!.success({
@@ -875,6 +1153,9 @@ export const useSceneStore = defineStore('scene', () => {
     resolveAssetUri,
     undo,
     redo,
+    // 撤销/重做状态（响应式）
+    canUndo,
+    canRedo,
     // 获取树形结构
     getObjectTree,
     applyObjectTree,
@@ -897,6 +1178,18 @@ export const useSceneStore = defineStore('scene', () => {
     snapshotKeyMode,
     snapshotKeyList,
     setSnapshotKeyMode,
-    setSnapshotKeyList
+    setSnapshotKeyList,
+    
+    // 命令模式相关
+    historyManager,
+    useCommandPattern,
+    historyVersion,
+    
+    // 场景状态
+    isSceneReady,
+    
+    // 截图函数引用（由 useRenderer 设置）
+    captureScreenshotFn,
+    setCaptureScreenshotFn
   }
 })

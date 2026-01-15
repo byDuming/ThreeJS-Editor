@@ -13,6 +13,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     AssetManager: typeof import('./src/components/panles/AssetManager.vue')['default']
     Attributes: typeof import('./src/components/panles/Attributes.vue')['default']
+    BottomAssetPanel: typeof import('./src/components/BottomAssetPanel.vue')['default']
     CameraAttr: typeof import('./src/components/panles/CameraAttr.vue')['default']
     GeometryAttr: typeof import('./src/components/panles/GeometryAttr.vue')['default']
     HelperAttr: typeof import('./src/components/panles/HelperAttr.vue')['default']
@@ -48,6 +49,7 @@ declare module 'vue' {
     NSwitch: typeof import('naive-ui')['NSwitch']
     NTabPane: typeof import('naive-ui')['NTabPane']
     NTabs: typeof import('naive-ui')['NTabs']
+    NTag: typeof import('naive-ui')['NTag']
     NTooltip: typeof import('naive-ui')['NTooltip']
     NTree: typeof import('naive-ui')['NTree']
     NUpload: typeof import('naive-ui')['NUpload']

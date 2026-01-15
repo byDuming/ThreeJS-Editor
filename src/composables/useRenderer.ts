@@ -42,6 +42,7 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
   let pointerDownPos: { x: number; y: number } | null = null
   let isDraggingTransform = false // 标记是否正在拖动 TransformControls
   let pendingTransformUpdate: { id: string; transform: { position: [number, number, number]; rotation: [number, number, number]; scale: [number, number, number] } } | null = null // 待提交的 transform 更新
+  let keyboardListenerAdded = false // 标记键盘事件监听器是否已添加
 
   function findCameraFromStore() {
     const map = sceneStore.objectsMap as unknown as Map<string, PerspectiveCamera>
@@ -101,6 +102,9 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
       // WebGPU 和 WebGL 都使用统一的渲染调用
       // TransformControls 在拖动时会自动触发渲染，这里确保场景正常渲染
       sceneStore.renderer!.render(sceneStore.threeScene!, camera.value!)
+      
+      // 渲染完成后处理截图请求
+      processScreenshot()
     })
   }
 
@@ -127,6 +131,11 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
     // const dom = sceneStore.webGPURenderer?.domElement
     container.value?.removeEventListener('pointerdown', handlePointerDown)
     container.value?.removeEventListener('pointerup', handlePointerUp)
+    // 移除键盘事件监听器
+    if (keyboardListenerAdded) {
+      window.removeEventListener('keydown', handleKeyDown)
+      keyboardListenerAdded = false
+    }
     sceneStore.renderer = null
     sceneStore.threeScene = null
     camera.value = null
@@ -172,13 +181,10 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
   }
 
   function handlePointerDown(event: PointerEvent) {
-    console.log('handlePointDown');
-    
     pointerDownPos = { x: event.clientX, y: event.clientY }
   }
 
   function handlePointerUp(event: PointerEvent) {
-    console.log('handlePointerUp');
     const dom = sceneStore.renderer?.domElement
     if (!camera.value || !dom || transformControls.value?.dragging) return
     const moved = pointerDownPos
@@ -248,14 +254,21 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
   function handleKeyDown(event: KeyboardEvent) {
     const tag = (event.target as HTMLElement | null)?.tagName
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (event.target as HTMLElement | null)?.isContentEditable) return
+    
     if (event.key.toLowerCase() === 'z' && (event.ctrlKey || event.metaKey)) {
       event.preventDefault()
-      // Ctrl/Cmd + Z 撤回，Shift + Z 回退
+      // Ctrl/Cmd + Z 撤回，Ctrl/Cmd + Shift + Z 回退
       if (event.shiftKey) {
-        sceneStore.redo?.()
+        sceneStore.redo()
       } else {
-        sceneStore.undo?.()
+        sceneStore.undo()
       }
+      return
+    }
+    // Ctrl/Cmd + Y 回退（Windows 习惯）
+    if (event.key.toLowerCase() === 'y' && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault()
+      sceneStore.redo()
       return
     }
     if (event.key.toLowerCase() === 's' && (event.ctrlKey || event.metaKey)) {
@@ -289,11 +302,14 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
   }
 
   function initSceneBackground() {
-    console.log('初始化renderere');
-    
     container.value?.addEventListener('pointerup', handlePointerUp)
     container.value?.addEventListener('pointerdown', handlePointerDown)
-    window.addEventListener('keydown', handleKeyDown)
+    
+    // 确保键盘事件监听器只添加一次
+    if (!keyboardListenerAdded) {
+      window.addEventListener('keydown', handleKeyDown)
+      keyboardListenerAdded = true
+    }
     
     const scene = new Scene()
     if (!sceneStore.threeScene) {
@@ -428,6 +444,8 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
           pendingTransformUpdate = null
           // 异步执行，避免阻塞交互响应
           setTimeout(() => {
+            // 如果使用命令模式，updateSceneObjectData 会自动创建命令
+            // 如果使用旧的快照模式，这里会跳过快照（保持原有行为）
             sceneStore.updateSceneObjectData(update.id, {
               transform: update.transform
             })
@@ -475,9 +493,112 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
     return pending
   }
 
+  // 截图相关
+  let pendingScreenshot: {
+    resolve: (blob: Blob) => void
+    reject: (error: Error) => void
+    width?: number
+    height?: number
+  } | null = null
+
+  /**
+   * 截取当前场景截图
+   * 在渲染循环中截图，确保使用正确的摄像机和时机
+   */
+  function captureScreenshot(width?: number, height?: number): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+      if (!sceneStore.renderer || !sceneStore.threeScene || !camera.value) {
+        reject(new Error('渲染器未初始化'))
+        return
+      }
+      
+      // 设置待处理的截图请求
+      pendingScreenshot = { resolve, reject, width, height }
+    })
+  }
+
+  /**
+   * 处理截图（在渲染循环中调用）
+   */
+  function processScreenshot() {
+    if (!pendingScreenshot || !sceneStore.renderer || !camera.value) return
+    
+    const { resolve, reject, width, height } = pendingScreenshot
+    pendingScreenshot = null
+    
+    try {
+      const canvas = sceneStore.renderer.domElement as HTMLCanvasElement
+      if (!canvas) {
+        reject(new Error('Canvas 不存在'))
+        return
+      }
+      
+      // 同步获取 canvas 内容
+      const dataUrl = canvas.toDataURL('image/png')
+      
+      // 如果需要缩放
+      if (width && height && (width !== canvas.width || height !== canvas.height)) {
+        const img = new Image()
+        img.onload = () => {
+          const tempCanvas = document.createElement('canvas')
+          tempCanvas.width = width
+          tempCanvas.height = height
+          const ctx = tempCanvas.getContext('2d')
+          if (!ctx) {
+            reject(new Error('无法创建 2D 上下文'))
+            return
+          }
+          ctx.imageSmoothingEnabled = true
+          ctx.imageSmoothingQuality = 'high'
+          
+          // 使用 cover 模式：保持宽高比，裁剪多余部分填满目标区域
+          const srcAspect = img.width / img.height
+          const dstAspect = width / height
+          let sx = 0, sy = 0, sw = img.width, sh = img.height
+          
+          if (srcAspect > dstAspect) {
+            // 原图更宽，裁剪左右两侧
+            sw = img.height * dstAspect
+            sx = (img.width - sw) / 2
+          } else if (srcAspect < dstAspect) {
+            // 原图更高，裁剪上下两侧
+            sh = img.width / dstAspect
+            sy = (img.height - sh) / 2
+          }
+          
+          ctx.drawImage(img, sx, sy, sw, sh, 0, 0, width, height)
+          tempCanvas.toBlob(
+            (blob) => {
+              if (blob) {
+                resolve(blob)
+              } else {
+                reject(new Error('截图失败'))
+              }
+            },
+            'image/png',
+            1.0
+          )
+        }
+        img.onerror = () => reject(new Error('图片加载失败'))
+        img.src = dataUrl
+      } else {
+        // 不需要缩放，直接转换
+        fetch(dataUrl)
+          .then(res => res.blob())
+          .then(resolve)
+          .catch(reject)
+      }
+    } catch (error) {
+      reject(error as Error)
+    }
+  }
+
   onBeforeUnmount(() => {
     window.removeEventListener('resize', resize)
-    window.removeEventListener('keydown', handleKeyDown)
+    if (keyboardListenerAdded) {
+      window.removeEventListener('keydown', handleKeyDown)
+      keyboardListenerAdded = false
+    }
     dispose()
   })
 
@@ -490,6 +611,7 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
     start,
     stop,
     resize,
-    dispose
+    dispose,
+    captureScreenshot
   }
 }

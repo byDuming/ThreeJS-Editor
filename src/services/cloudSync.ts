@@ -38,6 +38,7 @@ function localToCloud(local: SceneRow, userId?: string): Omit<CloudSceneRow, 'id
     renderer_settings: typeof local.rendererSettings === 'string'
       ? local.rendererSettings
       : JSON.stringify(local.rendererSettings || {}),
+    thumbnail: local.thumbnail,
     updated_at: local.updatedAt instanceof Date 
       ? local.updatedAt.toISOString() 
       : new Date(local.updatedAt).toISOString(),
@@ -71,6 +72,7 @@ function cloudToLocal(cloud: CloudSceneRow): SceneRow {
     objectDataList,
     assets,
     rendererSettings,
+    thumbnail: cloud.thumbnail,
     updatedAt: new Date(cloud.updated_at),
     createdAt: new Date(cloud.created_at)
   }

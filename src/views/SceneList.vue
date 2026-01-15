@@ -3,7 +3,6 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { sceneApi, type SceneListItem } from '@/services/sceneApi'
 import { useDialog, useMessage } from 'naive-ui'
-import { testSupabaseConnection, testCreateScene } from '@/utils/testSupabase'
 
 const router = useRouter()
 const dialog = useDialog()
@@ -99,35 +98,6 @@ function formatDate(date: Date): string {
   return new Date(date).toLocaleString('zh-CN')
 }
 
-// 测试 Supabase 连接
-async function handleTestConnection() {
-  loading.value = true
-  try {
-    await testSupabaseConnection()
-    message.success('测试完成，请查看控制台输出')
-  } catch (error) {
-    console.error('测试失败:', error)
-    message.error('测试失败，请查看控制台')
-  } finally {
-    loading.value = false
-  }
-}
-
-// 测试创建场景
-async function handleTestCreateScene() {
-  loading.value = true
-  try {
-    const scene = await testCreateScene()
-    message.success(`测试场景创建成功！ID: ${scene.id}`)
-    await loadSceneList()
-  } catch (error) {
-    console.error('测试创建场景失败:', error)
-    message.error('测试创建场景失败，请查看控制台')
-  } finally {
-    loading.value = false
-  }
-}
-
 onMounted(() => {
   loadSceneList()
 })
@@ -138,12 +108,12 @@ onMounted(() => {
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1vw;">
       <h2 style="margin: 0;">我的作品</h2>
       <n-space>
-        <n-button type="info" @click="handleTestConnection" :loading="loading">
+        <!-- <n-button type="info" @click="handleTestConnection" :loading="loading">
           测试连接
         </n-button>
         <n-button type="success" @click="handleTestCreateScene" :loading="loading">
           测试创建
-        </n-button>
+        </n-button> -->
         <n-button type="primary" @click="createNewScene" :loading="loading">
           新增场景
         </n-button>

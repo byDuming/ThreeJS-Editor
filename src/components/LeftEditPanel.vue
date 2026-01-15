@@ -1,9 +1,8 @@
 <script setup lang="ts">
-  import { type TreeDropInfo, type TreeOption, NIcon, type DropdownOption, type UploadFileInfo } from 'naive-ui'
+  import { type TreeDropInfo, type TreeOption, NIcon, type DropdownOption } from 'naive-ui'
   import { ref, computed, watch, h, type Component } from 'vue'
   import { Cube, OptionsSharp, CubeOutline, ColorPalette, Camera, Move, Resize, Earth, ArrowUndo, ArrowRedo, SettingsOutline, FolderOutline } from '@vicons/ionicons5'
   import { TextureOutlined, DeleteFilled, DriveFileRenameOutlineRound, LightbulbOutlined, Md3DRotationFilled, PlaceFilled } from '@vicons/material'
-  import { Cubes } from '@vicons/fa'
 
   import AttributesPanel from './panles/Attributes.vue'
   import GeometryAttrPanel from './panles/GeometryAttr.vue'
@@ -13,7 +12,6 @@
   import CameraAttrPanel from './panles/CameraAttr.vue'
   import LightAttrPanel from './panles/LightAttr.vue'
   import ProjectAttrPanel from './panles/ProjectAttr.vue'
-  import AssetManagerPanel from './panles/AssetManager.vue'
   import { useSceneStore } from '@/stores/modules/useScene.store'
   import { useUiEditorStore } from '@/stores/modules/uiEditor.store.ts'
   import { geometryTypeOptions } from '@/types/geometry'
@@ -38,8 +36,10 @@
   const treeData = ref<TreeOption[]>([])
   // 彻底优化：使用防抖，避免频繁重建树结构导致卡顿
   // 只有在用户停止操作一段时间后才更新树结构
+  // 监听 objectDataList.length 和 historyVersion（撤回/重做时更新树）
   let treeUpdateTimer: ReturnType<typeof setTimeout> | null = null
-  watch(() => sceneStore.objectDataList, () => {
+  
+  function scheduleTreeUpdate() {
     // 清除之前的定时器
     if (treeUpdateTimer) {
       clearTimeout(treeUpdateTimer)
@@ -49,7 +49,12 @@
       treeData.value = sceneStore.getObjectTree()
       treeUpdateTimer = null
     }, 300)
-  }, { flush: 'post', deep: false })
+  }
+  
+  // 监听数组长度变化（添加/删除对象）
+  watch(() => sceneStore.objectDataList.length, scheduleTreeUpdate, { flush: 'post', immediate: true })
+  // 监听历史版本变化（撤回/重做时，parentId 可能变化，需要更新树）
+  watch(() => sceneStore.historyVersion, scheduleTreeUpdate, { flush: 'post' })
 
   // 下面内容与原 LeftEditPanle.vue 一致，仅命名规范化
 
@@ -72,22 +77,13 @@
 
   const expandedKeysRef = ref<string[]>(['Scene'])
   const checkedKeysRef = ref<string[]>([])
-  const modelUploadList = ref<UploadFileInfo[]>([])
+  
   function handleExpandedKeysChange(expandedKeys: string[]) {
     expandedKeysRef.value = expandedKeys
   }
 
   function handleCheckedKeysChange(checkedKeys: string[]) {
     checkedKeysRef.value = checkedKeys
-  }
-
-  function handleModelFiles(fileList: UploadFileInfo[]) {
-    modelUploadList.value = fileList
-    const file = fileList[0]?.file
-    if (!file) return
-    const parentId = sceneStore.selectedObjectId ?? 'Scene'
-    sceneStore.importModelFile(file, parentId)
-    modelUploadList.value = []
   }
 
   function handleDrop({ node, dragNode, dropPosition }: TreeDropInfo) {
@@ -219,7 +215,6 @@
     )
     return [
       { name: 'attributes-tab', icon: OptionsSharp, label: '属性', component: AttributesPanel, isShow: true },
-      { name: 'assets-tab', icon: FolderOutline, label: '模型库', component: AssetManagerPanel, isShow: true },
       { name: 'scene-tab', icon: ColorPalette, label: '场景属性', component: SceneAttrPanel, isShow: isScene },
       { name: 'camera-tab', icon: Camera, label: '相机属性', component: CameraAttrPanel, isShow: isCamera },
       { name: 'light-tab', icon: LightbulbOutlined, label: '光源属性', component: LightAttrPanel, isShow: isLight },
@@ -437,7 +432,9 @@
     <n-float-button-group shape="square" style="z-index: 10; margin-left: -80px; position: relative;">
       <n-tooltip trigger="hover" placement="right">
         <template #trigger>
-          <n-float-button :class="sceneStore.undoStack.length === 0 ? 'n-float-button-disabled' : ''" @click="sceneStore.undo">
+          <n-float-button 
+            :class="!sceneStore.canUndo ? 'n-float-button-disabled' : ''" 
+            @click="sceneStore.undo">
             <n-icon><ArrowUndo /></n-icon>
           </n-float-button>
         </template>
@@ -445,7 +442,9 @@
       </n-tooltip>
       <n-tooltip trigger="hover" placement="right">
         <template #trigger>
-          <n-float-button :class="sceneStore.redoStack.length === 0 ? 'n-float-button-disabled' : ''" @click.stop="sceneStore.redo">
+          <n-float-button 
+            :class="!sceneStore.canRedo ? 'n-float-button-disabled' : ''" 
+            @click.stop="sceneStore.redo">
             <n-icon><ArrowRedo /></n-icon>
           </n-float-button>
         </template>
@@ -460,35 +459,16 @@
         </n-icon>
       </n-float-button>
     </n-dropdown>
-    <!-- import model -->
-    <n-upload
-      :default-upload="false"
-      :show-file-list="false"
-      accept=".glb,.gltf"
-      :file-list="modelUploadList"
-      @update:file-list="(files: UploadFileInfo[]) => handleModelFiles(files)"
-    >
-      <n-tooltip trigger="hover" placement="right">
-        <template #trigger>
-          <n-float-button shape="square" style="z-index: 10; margin-left: -80px; position: relative;">
-            <n-icon>
-              <Cubes />
-            </n-icon>
-          </n-float-button>
-        </template>
-        导入模型
-      </n-tooltip>
-    </n-upload>
-    <!-- open model library -->
+    <!-- open asset panel -->
     <n-tooltip trigger="hover" placement="right">
       <template #trigger>
-        <n-float-button shape="square" style="z-index: 10; margin-left: -80px; position: relative;" @click="uiEditorStore.setTabKey('assets-tab')">
+        <n-float-button shape="square" style="z-index: 10; margin-left: -80px; position: relative;" @click="uiEditorStore.openAssetPanel('model')">
           <n-icon>
             <FolderOutline />
           </n-icon>
         </n-float-button>
       </template>
-      模型库
+      资产管理
     </n-tooltip>
   </n-flex>
 
@@ -540,7 +520,7 @@
           </n-popover>
         </template>
         <!-- 属性面板内容 -->
-        <component v-if="tab.name === 'project-tab' || tab.name === 'assets-tab'" :is="tab.component" />
+        <component v-if="tab.name === 'project-tab'" :is="tab.component" />
         <component v-else-if="sceneStore.currentObjectData" :is="tab.component" />
         <n-empty v-else description="未选择对象" />
       </n-tab-pane>
