@@ -12,7 +12,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useAnimationStore } from '@/stores/modules/useAnimation.store'
 import { useSceneStore } from '@/stores/modules/useScene.store'
-import { useMessage } from 'naive-ui'
+import { useMessage, useDialog } from 'naive-ui'
 import TimelineHeader from './TimelineHeader.vue'
 import TimelineTrack from './TimelineTrack.vue'
 import TimelineControls from './TimelineControls.vue'
@@ -20,6 +20,11 @@ import TimelineControls from './TimelineControls.vue'
 const animationStore = useAnimationStore()
 const sceneStore = useSceneStore()
 const message = useMessage()
+const dialog = useDialog()
+
+// 剪辑名称编辑状态
+const editingClipId = ref<string | null>(null)
+const editingClipName = ref('')
 
 // 删除关键帧（带反馈）
 function handleDeleteKeyframe() {
@@ -291,6 +296,72 @@ function formatTime(seconds: number): string {
   return `${mins.toString().padStart(2, '0')}:${secs.toFixed(2).padStart(5, '0')}`
 }
 
+// 创建新剪辑
+function handleCreateClip() {
+  const name = `动画 ${animationStore.clips.length + 1}`
+  animationStore.createClip({ name })
+  message.success(`已创建动画剪辑: ${name}`)
+}
+
+// 删除当前剪辑
+function handleDeleteClip() {
+  if (!animationStore.activeClip) return
+  
+  const clipName = animationStore.activeClip.name
+  dialog.warning({
+    title: '确认删除',
+    content: `确定要删除动画剪辑 "${clipName}" 吗？此操作不可撤销。`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: () => {
+      animationStore.deleteClip(animationStore.activeClip!.id)
+      message.success(`已删除动画剪辑: ${clipName}`)
+    }
+  })
+}
+
+// 切换活动剪辑
+function handleSwitchClip(clipId: string | null) {
+  if (clipId) {
+    // 停止当前播放
+    animationStore.stop()
+    // 切换到新剪辑
+    animationStore.activeClipId = clipId
+    // 重置时间到开始
+    animationStore.seek(0)
+  }
+}
+
+// 开始编辑剪辑名称
+function handleStartEditClipName(clip: { id: string; name: string }) {
+  editingClipId.value = clip.id
+  editingClipName.value = clip.name
+}
+
+// 完成编辑剪辑名称
+function handleFinishEditClipName() {
+  if (editingClipId.value && editingClipName.value.trim()) {
+    animationStore.updateClip(editingClipId.value, { name: editingClipName.value.trim() })
+    message.success('已更新剪辑名称')
+  }
+  editingClipId.value = null
+  editingClipName.value = ''
+}
+
+// 取消编辑剪辑名称
+function handleCancelEditClipName() {
+  editingClipId.value = null
+  editingClipName.value = ''
+}
+
+// 剪辑选项（用于下拉选择器）
+const clipOptions = computed(() => 
+  animationStore.clips.map(clip => ({
+    label: clip.name,
+    value: clip.id
+  }))
+)
+
 onMounted(() => {
   window.addEventListener('keydown', handleKeyDown)
 })
@@ -302,6 +373,79 @@ onUnmounted(() => {
 
 <template>
   <div class="timeline-container" @wheel="handleWheel">
+    <!-- 剪辑管理栏 -->
+    <div class="clip-manager" v-if="animationStore.clips.length > 0 || !animationStore.activeClip">
+      <div class="clip-manager-left">
+        <n-select
+          v-if="animationStore.clips.length > 0"
+          :value="animationStore.activeClipId"
+          :options="clipOptions"
+          size="small"
+          style="width: 200px"
+          placeholder="选择动画剪辑"
+          @update:value="handleSwitchClip"
+        />
+        <span v-else class="no-clips-hint">暂无动画剪辑</span>
+      </div>
+      <div class="clip-manager-right">
+        <n-button 
+          quaternary 
+          size="small" 
+          @click="handleCreateClip"
+          title="创建新动画剪辑"
+        >
+          <template #icon>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+            </svg>
+          </template>
+          新建
+        </n-button>
+        <n-button 
+          v-if="animationStore.activeClip"
+          quaternary 
+          size="small" 
+          @click="handleStartEditClipName(animationStore.activeClip)"
+          title="重命名"
+        >
+          <template #icon>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+            </svg>
+          </template>
+        </n-button>
+        <n-button 
+          v-if="animationStore.activeClip"
+          quaternary 
+          size="small" 
+          @click="handleDeleteClip"
+          title="删除当前剪辑"
+        >
+          <template #icon>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+            </svg>
+          </template>
+        </n-button>
+      </div>
+    </div>
+    
+    <!-- 剪辑名称编辑对话框 -->
+    <div v-if="editingClipId && animationStore.activeClip && editingClipId === animationStore.activeClip.id" class="clip-name-editor">
+      <span class="edit-label">重命名:</span>
+      <n-input
+        v-model:value="editingClipName"
+        size="small"
+        placeholder="输入剪辑名称"
+        @keyup.enter="handleFinishEditClipName"
+        @keyup.esc="handleCancelEditClipName"
+        style="width: 200px"
+        autofocus
+      />
+      <n-button size="small" type="primary" @click="handleFinishEditClipName">确定</n-button>
+      <n-button size="small" @click="handleCancelEditClipName">取消</n-button>
+    </div>
+    
     <!-- 顶部控制栏 -->
     <TimelineControls 
       :current-time="animationStore.currentTime"
@@ -434,7 +578,7 @@ onUnmounted(() => {
     <div v-else class="no-clip-message">
       <n-empty description="暂无动画剪辑">
         <template #extra>
-          <n-button type="primary" @click="animationStore.createClip({ name: '新动画' })">
+          <n-button type="primary" @click="handleCreateClip">
             创建动画
           </n-button>
         </template>
@@ -451,6 +595,48 @@ onUnmounted(() => {
   background: #fafafa;
   color: #333;
   user-select: none;
+}
+
+/* 剪辑管理栏 */
+.clip-manager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  gap: 12px;
+}
+
+.clip-manager-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.clip-manager-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.no-clips-hint {
+  font-size: 12px;
+  color: #999;
+}
+
+.clip-name-editor {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: #fff3cd;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.edit-label {
+  font-size: 12px;
+  color: #666;
 }
 
 .timeline-body {

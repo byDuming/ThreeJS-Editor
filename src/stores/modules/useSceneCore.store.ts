@@ -61,7 +61,7 @@ export const useSceneCoreStore = defineStore('sceneCore', () => {
   
   /** 渲染器设置 */
   const rendererSettings = ref({
-    rendererType: 'webgpu',
+    rendererType: 'webgl',
     antialias: true,
     shadows: true,
     shadowType: 'pcf',

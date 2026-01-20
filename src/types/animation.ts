@@ -25,6 +25,10 @@ export interface AnimationClip {
   loop: boolean
   /** 循环次数（-1 为无限循环） */
   loopCount: number
+  /** 播放模式：'auto' 进入场景就播放，'manual' 手动调用 */
+  playMode: 'auto' | 'manual'
+  /** 播放完成后是否重置到开始位置 */
+  resetOnComplete: boolean
   /** 包含的动画轨道 */
   tracks: AnimationTrack[]
   /** 创建时间 */
@@ -402,6 +406,8 @@ export interface SerializedAnimationClip {
   fps: number
   loop: boolean
   loopCount: number
+  playMode?: 'auto' | 'manual'  // 可选以兼容旧数据
+  resetOnComplete?: boolean  // 可选以兼容旧数据
   tracks: AnimationTrack[]
   createdAt: string  // ISO 日期字符串
   updatedAt: string  // ISO 日期字符串
@@ -427,6 +433,8 @@ export const DEFAULT_CLIP: Omit<AnimationClip, 'id' | 'createdAt' | 'updatedAt'>
   fps: 30,
   loop: false,
   loopCount: -1,
+  playMode: 'manual',
+  resetOnComplete: true,
   tracks: []
 }
 

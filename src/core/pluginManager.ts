@@ -256,6 +256,13 @@ export class PluginManager {
     return this.plugins.has(pluginId)
   }
 
+  /**
+   * 获取插件对象（用于获取完整信息，包括扩展）
+   */
+  getPlugin(pluginId: string): EnginePlugin | undefined {
+    return this.plugins.get(pluginId)
+  }
+
   // ==================== 对象类型扩展 ====================
   
   registerObjectType(extension: ObjectTypeExtension) {

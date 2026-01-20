@@ -213,6 +213,8 @@ export const useAnimationStore = defineStore('animation', () => {
       fps: params.fps ?? 30,
       loop: params.loop ?? false,
       loopCount: -1,
+      playMode: 'manual',
+      resetOnComplete: true,
       tracks: [],
       createdAt: now,
       updatedAt: now
@@ -734,24 +736,32 @@ export const useAnimationStore = defineStore('animation', () => {
   
   /**
    * 停止
+   * @param shouldReset 是否重置到开始位置
+   *   - 默认 true（手动停止时总是重置）
+   *   - 播放完成时传入 resetOnComplete 的值来决定
    */
-  function stop() {
+  function stop(shouldReset: boolean = true) {
     const wasPlaying = playbackState.value === 'playing'
     
     playbackState.value = 'stopped'
-    currentTime.value = 0
-    currentLoop.value = 0
+    
+    // 根据 shouldReset 决定是否重置
+    // shouldReset = true：重置
+    // shouldReset = false：不重置，保持在当前位置
+    if (shouldReset) {
+      currentTime.value = 0
+      currentLoop.value = 0
+      // 应用初始状态
+      applyAnimationAtTime(0)
+    }
     
     if (animationFrameId !== null) {
       cancelAnimationFrame(animationFrameId)
       animationFrameId = null
     }
     
-    // 应用初始状态
-    applyAnimationAtTime(0)
-    
     if (activeClip.value) {
-      emitEvent({ type: 'end', time: 0, clipId: activeClip.value.id })
+      emitEvent({ type: 'end', time: currentTime.value, clipId: activeClip.value.id })
     }
     
     // 触发完成回调
@@ -833,7 +843,8 @@ export const useAnimationStore = defineStore('animation', () => {
       if (activeClip.value.loop) {
         currentLoop.value++
         if (activeClip.value.loopCount > 0 && currentLoop.value >= activeClip.value.loopCount) {
-          stop()
+          // 循环完成，根据 resetOnComplete 选项决定是否重置
+          stop(activeClip.value.resetOnComplete)
           return
         }
         
@@ -852,7 +863,8 @@ export const useAnimationStore = defineStore('animation', () => {
         }
       } else {
         currentTime.value = activeClip.value.duration
-        stop()
+        // 播放完成，根据 resetOnComplete 选项决定是否重置
+        stop(activeClip.value.resetOnComplete)
         return
       }
     } else if (currentTime.value <= 0) {
@@ -862,7 +874,8 @@ export const useAnimationStore = defineStore('animation', () => {
         currentLoop.value++
         
         if (activeClip.value.loopCount > 0 && currentLoop.value >= activeClip.value.loopCount) {
-          stop()
+          // 循环完成，根据 resetOnComplete 选项决定是否重置
+          stop(activeClip.value.resetOnComplete)
           return
         }
         
@@ -874,7 +887,8 @@ export const useAnimationStore = defineStore('animation', () => {
         }
       } else if (playbackDirection.value === 'backward') {
         currentTime.value = 0
-        stop()
+        // 反向播放完成，根据 resetOnComplete 选项决定是否重置
+        stop(activeClip.value.resetOnComplete)
         return
       }
     }
@@ -1017,6 +1031,8 @@ export const useAnimationStore = defineStore('animation', () => {
   function deserializeClip(data: SerializedAnimationClip): AnimationClip {
     return {
       ...data,
+      playMode: data.playMode ?? 'manual',  // 兼容旧数据，默认为手动
+      resetOnComplete: data.resetOnComplete ?? true,  // 兼容旧数据，默认为重置
       createdAt: new Date(data.createdAt),
       updatedAt: new Date(data.updatedAt)
     }

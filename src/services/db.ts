@@ -47,7 +47,7 @@ export async function initDB(): Promise<{ inst: ReturnType<typeof getInstance>; 
       version: 1,
       assets: [],
       rendererSettings: {
-        rendererType: 'webgpu',
+        rendererType: 'webgl',
         antialias: true,
         shadows: true,
         shadowType: 'pcf',

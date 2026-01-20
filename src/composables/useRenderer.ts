@@ -282,8 +282,9 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
   /**
    * 切换到新场景（统一入口）
    * 按正确顺序执行：停止渲染 → 清理 → 创建场景 → 同步对象 → 设置相机 → 设置控制器 → 开始渲染
+   * 现在会等待所有资产加载完成
    */
-  function switchScene() {
+  async function switchScene() {
     console.log('[useRenderer] switchScene() 开始')
     
     // 1. 停止当前渲染
@@ -300,8 +301,8 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
     const scene = new Scene()
     scene.background = new Color('#CFD8DC')
     
-    // 4. 设置场景到 store（这会创建所有 three.js 对象并挂载）
-    sceneStore.setThreeScene(scene)
+    // 4. 设置场景到 store（这会创建所有 three.js 对象并挂载，并等待所有资产加载完成）
+    await sceneStore.setThreeScene(scene)
 
     // 5. 从 store 中找到或创建相机
     const cam = ensureCamera()
@@ -328,7 +329,7 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
     resize()
     start()
 
-    console.log('[useRenderer] switchScene() 完成')
+    console.log('[useRenderer] switchScene() 完成（所有资产已加载）')
   }
 
   // ==================== 初始化（首次挂载）====================

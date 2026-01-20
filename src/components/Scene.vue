@@ -116,7 +116,18 @@
     }
     
     // 通知 useRenderer 切换场景（创建新的 three.js 场景并同步所有对象）
-    switchScene()
+    // 现在会等待所有网络资产加载完成
+    await switchScene()
+    
+    // 场景切换和资产加载完成后，检查是否有自动播放的剪辑
+    const { useAnimationStore } = await import('@/stores/modules/useAnimation.store')
+    const animationStore = useAnimationStore()
+    const autoPlayClip = animationStore.clips.find(clip => clip.playMode === 'auto')
+    if (autoPlayClip) {
+      // 资产已加载完成，可以直接播放动画
+      animationStore.playClip(autoPlayClip.id)
+      console.log('[Scene] 自动播放剪辑:', autoPlayClip.name, '（所有资产已加载完成）')
+    }
   }
 
   // 监听 sceneId 变化，支持动态切换场景

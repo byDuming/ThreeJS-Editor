@@ -327,7 +327,7 @@ export class SceneApi {
       objectDataList: params.objectDataList ?? defaultObjectDataList,
       assets: params.assets ?? [],
       rendererSettings: params.rendererSettings ?? {
-        rendererType: 'webgpu',
+        rendererType: 'webgl',
         antialias: true,
         shadows: true,
         shadowType: 'pcf',

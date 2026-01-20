@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { type TreeDropInfo, type TreeOption, NIcon, type DropdownOption, NInput } from 'naive-ui'
   import { ref, computed, watch, h, type Component} from 'vue'
-  import { Cube, OptionsSharp, CubeOutline, ColorPalette, Camera, Move, Resize, Earth, ArrowUndo, ArrowRedo, SettingsOutline, FolderOutline, CopyOutline } from '@vicons/ionicons5'
+  import { Cube, OptionsSharp, CubeOutline, ColorPalette, Camera, Move, Resize, Earth, ArrowUndo, ArrowRedo, SettingsOutline, FolderOutline, CopyOutline, ExtensionPuzzleOutline } from '@vicons/ionicons5'
   import { TextureOutlined, DeleteFilled, DriveFileRenameOutlineRound, LightbulbOutlined, Md3DRotationFilled, PlaceFilled } from '@vicons/material'
 
   import AttributesPanel from './panels/Attributes.vue'
@@ -12,6 +12,7 @@
   import CameraAttrPanel from './panels/CameraAttr.vue'
   import LightAttrPanel from './panels/LightAttr.vue'
   import ProjectAttrPanel from './panels/ProjectAttr.vue'
+  import PluginManagerPanel from './panels/PluginManager.vue'
   import { useSceneStore } from '@/stores/modules/useScene.store'
   import { useUiEditorStore } from '@/stores/modules/uiEditor.store.ts'
   import { geometryTypeOptions } from '@/types/geometry'
@@ -309,6 +310,7 @@
       { name: 'geometry-tab', icon: Cube, label: '几何组件', component: GeometryAttrPanel, isShow: isMesh },
       { name: 'material-tab', icon: TextureOutlined, label: '材质组件', component: MaterialAttrPanel, isShow: isMesh },
       { name: 'project-tab', icon: SettingsOutline, label: '工程属性', component: ProjectAttrPanel, isShow: true },
+      { name: 'plugin-tab', icon: ExtensionPuzzleOutline, label: '插件管理', component: PluginManagerPanel, isShow: true },
     ].filter(tab => tab.isShow)
   })
 
@@ -608,6 +610,7 @@
         </template>
         <!-- 属性面板内容 -->
         <component v-if="tab.name === 'project-tab'" :is="tab.component" />
+        <component v-else-if="tab.name === 'plugin-tab'" :is="tab.component" />
         <component v-else-if="sceneStore.currentObjectData" :is="tab.component" />
         <n-empty v-else description="未选择对象" />
       </n-tab-pane>

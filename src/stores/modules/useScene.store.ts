@@ -53,7 +53,7 @@ export const useSceneStore = defineStore('scene', () => {
   const renderer = shallowRef<WebGPURenderer | WebGLRenderer | null>(null);
   const threeScene = shallowRef<Scene | null>(null);
   const rendererSettings = ref({
-    rendererType: 'webgpu',
+    rendererType: 'webgl',
     antialias: true,
     shadows: true,
     shadowType: 'pcf',
@@ -64,6 +64,12 @@ export const useSceneStore = defineStore('scene', () => {
   })
   const assets = ref<AssetRef[]>([])
   const assetFiles = shallowRef(new Map<string, File>())
+  
+  // 资产加载状态跟踪（用于确保动画在资产加载完成后才播放）
+  const loadingAssets = ref(new Set<string>()) // 正在加载的资产ID集合
+  const loadedAssets = ref(new Set<string>()) // 已加载完成的资产ID集合
+  const assetLoadPromises = shallowRef(new Map<string, Promise<void>>()) // 资产加载Promise映射
+  const loadedAssetScenes = shallowRef(new Map<string, any>()) // 已加载的资产场景缓存（用于克隆）
   
   // 截图函数引用（由 useRenderer 设置）
   const captureScreenshotFn = shallowRef<((width?: number, height?: number) => Promise<Blob>) | null>(null)
@@ -151,7 +157,7 @@ export const useSceneStore = defineStore('scene', () => {
     return asset
   }
 
-  async function resolveAssetUri(asset: AssetRef) {
+  async function resolveAssetUri(asset: AssetRef): Promise<{ url: string; revoke?: () => void } | null> {
     if (asset.uri.startsWith('local://')) {
       const file = assetFiles.value.get(asset.id)
       if (!file) return null
@@ -161,24 +167,83 @@ export const useSceneStore = defineStore('scene', () => {
     return { url: asset.uri }
   }
 
-  async function loadModelAssetIntoObject(assetId: string, objectId: string) {
+  async function loadModelAssetIntoObject(assetId: string, objectId: string): Promise<void> {
     const asset = getAssetById(assetId)
-    if (!asset) return
-    const target = objectsMap.value.get(objectId)
-    if (!target) return
-    const resolved = await resolveAssetUri(asset)
-    if (!resolved) {
-      console.warn('Model asset is missing local file:', asset.name)
+    if (!asset) {
+      console.warn(`[loadModelAssetIntoObject] 找不到资产: ${assetId}`)
       return
     }
-    const loader = new GLTFLoader()
-    try {
-      const gltf = await loader.loadAsync(resolved.url)
-      target.children.slice().forEach(child => target.remove(child))
-      if (gltf.scene) target.add(gltf.scene)
-    } finally {
-      resolved.revoke?.()
+    
+    const target = objectsMap.value.get(objectId)
+    if (!target) {
+      console.warn(`[loadModelAssetIntoObject] 找不到目标对象: ${objectId}`)
+      return
     }
+    
+    // 如果资产已经在加载中，等待加载完成
+    const existingPromise = assetLoadPromises.value.get(assetId)
+    if (existingPromise) {
+      await existingPromise
+      // 加载完成后，从缓存中克隆模型到目标对象
+      const cachedScene = loadedAssetScenes.value.get(assetId)
+      if (cachedScene) {
+        target.children.slice().forEach(child => target.remove(child))
+        // 克隆场景（使用 clone 方法）
+        const clonedScene = cachedScene.clone(true)
+        target.add(clonedScene)
+      }
+      return
+    }
+    
+    // 如果资产已经加载完成，从缓存中克隆
+    if (loadedAssets.value.has(assetId)) {
+      const cachedScene = loadedAssetScenes.value.get(assetId)
+      if (cachedScene) {
+        target.children.slice().forEach(child => target.remove(child))
+        const clonedScene = cachedScene.clone(true)
+        target.add(clonedScene)
+      }
+      return
+    }
+    
+    // 创建加载Promise
+    const loadPromise = (async () => {
+      loadingAssets.value.add(assetId)
+      let resolved: { url: string; revoke?: () => void } | null = null
+      try {
+        resolved = await resolveAssetUri(asset)
+        if (!resolved) {
+          console.warn('Model asset is missing local file:', asset.name)
+          return
+        }
+        const loader = new GLTFLoader()
+        const gltf = await loader.loadAsync(resolved.url)
+        
+        // 保存原始场景到缓存（用于后续克隆）
+        if (gltf.scene) {
+          // 先保存原始场景到缓存
+          loadedAssetScenes.value.set(assetId, gltf.scene)
+          // 为第一个对象添加克隆的场景（保持原始场景在缓存中）
+          target.children.slice().forEach(child => target.remove(child))
+          const clonedScene = gltf.scene.clone(true)
+          target.add(clonedScene)
+        }
+        
+        loadedAssets.value.add(assetId)
+        console.log(`[loadModelAssetIntoObject] 资产加载完成: ${asset.name} (${assetId})`)
+      } catch (error) {
+        console.error(`[loadModelAssetIntoObject] 加载资产失败: ${asset.name} (${assetId})`, error)
+        throw error
+      } finally {
+        loadingAssets.value.delete(assetId)
+        resolved?.revoke?.()
+      }
+    })()
+    
+    // 保存Promise以便其他对象可以等待同一个资产的加载
+    assetLoadPromises.value.set(assetId, loadPromise)
+    
+    await loadPromise
   }
 
   async function importModelFile(file: File, parentId: string) {
@@ -580,12 +645,21 @@ export const useSceneStore = defineStore('scene', () => {
     nextList.forEach(item => attachThreeObject(item))
   }
 
-  function setThreeScene(scene: Scene | null) {
+  async function setThreeScene(scene: Scene | null): Promise<void> {
     threeScene.value = scene
     if (!scene) return
 
+    // 清空之前的加载状态（新场景切换时）
+    loadingAssets.value.clear()
+    loadedAssets.value.clear()
+    assetLoadPromises.value.clear()
+    loadedAssetScenes.value.clear()
+
     // 确保每个数据节点都有对应的 three 对象并挂载
     const dataMap = new Map(objectDataList.value.map(item => [item.id, item]))
+
+    // 收集所有需要加载的模型资产
+    const modelLoadPromises: Promise<void>[] = []
 
     dataMap.forEach(data => {
       let obj = objectsMap.value.get(data.id)
@@ -603,7 +677,9 @@ export const useSceneStore = defineStore('scene', () => {
         applyLightSettings(obj as any, data)
       }
       if (data.type === 'model' && data.assetId) {
-        void loadModelAssetIntoObject(data.assetId, data.id)
+        // 收集模型加载Promise
+        const loadPromise = loadModelAssetIntoObject(data.assetId, data.id)
+        modelLoadPromises.push(loadPromise)
       }
     })
 
@@ -621,6 +697,13 @@ export const useSceneStore = defineStore('scene', () => {
     const sceneData = objectDataList.value.find(item => item.type === 'scene')
     if (sceneData && threeScene.value) {
       applySceneSettings(threeScene.value, sceneData)
+    }
+
+    // 等待所有模型资产加载完成
+    if (modelLoadPromises.length > 0) {
+      console.log(`[setThreeScene] 等待 ${modelLoadPromises.length} 个模型资产加载完成...`)
+      await Promise.allSettled(modelLoadPromises)
+      console.log('[setThreeScene] 所有模型资产加载完成')
     }
   }
 

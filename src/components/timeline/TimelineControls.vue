@@ -37,6 +37,12 @@ const speedOptions = [
   { label: '1.5x', value: 1.5 },
   { label: '2x', value: 2 },
 ]
+
+// 播放模式选项
+const playModeOptions = [
+  { label: '进入场景播放', value: 'auto' },
+  { label: '手动调用', value: 'manual' },
+]
 </script>
 
 <template>
@@ -151,6 +157,33 @@ const speedOptions = [
         </template>
       </n-button>
       
+      <!-- 播放完成后重置 -->
+      <n-tooltip>
+        <template #trigger>
+          <n-switch
+            v-if="animationStore.activeClip"
+            :value="animationStore.activeClip.resetOnComplete"
+            size="small"
+            @update:value="(value: boolean) => animationStore.activeClip && animationStore.updateClip(animationStore.activeClip.id, { resetOnComplete: value })"
+          />
+        </template>
+        {{ animationStore.activeClip?.resetOnComplete ? '播放完成后重置' : '播放完成后不重置' }}
+      </n-tooltip>
+      <span v-if="animationStore.activeClip" class="reset-label" :title="animationStore.activeClip.resetOnComplete ? '播放完成后重置到开始' : '播放完成后保持在结束位置'">
+        {{ animationStore.activeClip.resetOnComplete ? '重置' : '保持' }}
+      </span>
+      
+      <!-- 播放模式 -->
+      <n-select
+        v-if="animationStore.activeClip"
+        :value="animationStore.activeClip.playMode"
+        :options="playModeOptions"
+        size="small"
+        style="width: 120px"
+        @update:value="(value: 'auto' | 'manual') => animationStore.activeClip && animationStore.updateClip(animationStore.activeClip.id, { playMode: value })"
+        title="播放模式"
+      />
+      
       <!-- 播放速度 -->
       <n-select
         v-model:value="animationStore.playbackSpeed"
@@ -225,5 +258,12 @@ const speedOptions = [
   color: #666;
   min-width: 40px;
   text-align: center;
+}
+
+.reset-label {
+  font-size: 11px;
+  color: #666;
+  margin-left: 4px;
+  white-space: nowrap;
 }
 </style>
