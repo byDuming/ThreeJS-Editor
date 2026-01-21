@@ -16,6 +16,7 @@
   import { useSceneStore } from '@/stores/modules/useScene.store'
   import { useUiEditorStore } from '@/stores/modules/uiEditor.store.ts'
   import { geometryTypeOptions } from '@/types/geometry'
+  import { usePluginManager } from '@/core'
 
   /**
    * 左侧编辑面板：
@@ -33,6 +34,7 @@
    */
   const sceneStore = useSceneStore()
   const uiEditorStore = useUiEditorStore()
+  const { panels: pluginPanels } = usePluginManager()
 
   const treeData = ref<TreeOption[]>([])
   // 彻底优化：使用防抖，避免频繁重建树结构导致卡顿
@@ -301,17 +303,31 @@
     const hasLinkedHelper = sceneStore.objectDataList.some(item =>
       item.type === 'helper' && (item.helper as any)?.targetId === sceneStore.selectedObjectId
     )
-    return [
-      { name: 'attributes-tab', icon: OptionsSharp, label: '属性', component: AttributesPanel, isShow: true },
-      { name: 'scene-tab', icon: ColorPalette, label: '场景属性', component: SceneAttrPanel, isShow: isScene },
-      { name: 'camera-tab', icon: Camera, label: '相机属性', component: CameraAttrPanel, isShow: isCamera },
-      { name: 'light-tab', icon: LightbulbOutlined, label: '光源属性', component: LightAttrPanel, isShow: isLight },
-      { name: 'helper-tab', icon: CubeOutline, label: '辅助对象', component: HelperAttributesPanel, isShow: isHelper || hasLinkedHelper },
-      { name: 'geometry-tab', icon: Cube, label: '几何组件', component: GeometryAttrPanel, isShow: isMesh },
-      { name: 'material-tab', icon: TextureOutlined, label: '材质组件', component: MaterialAttrPanel, isShow: isMesh },
-      { name: 'project-tab', icon: SettingsOutline, label: '工程属性', component: ProjectAttrPanel, isShow: true },
-      { name: 'plugin-tab', icon: ExtensionPuzzleOutline, label: '插件管理', component: PluginManagerPanel, isShow: true },
-    ].filter(tab => tab.isShow)
+
+    const baseTabs = [
+      { name: 'attributes-tab', icon: OptionsSharp, label: '属性', component: AttributesPanel, isShow: true, requiresSelection: true },
+      { name: 'scene-tab', icon: ColorPalette, label: '场景属性', component: SceneAttrPanel, isShow: isScene, requiresSelection: true },
+      { name: 'camera-tab', icon: Camera, label: '相机属性', component: CameraAttrPanel, isShow: isCamera, requiresSelection: true },
+      { name: 'light-tab', icon: LightbulbOutlined, label: '光源属性', component: LightAttrPanel, isShow: isLight, requiresSelection: true },
+      { name: 'helper-tab', icon: CubeOutline, label: '辅助对象', component: HelperAttributesPanel, isShow: isHelper || hasLinkedHelper, requiresSelection: true },
+      { name: 'geometry-tab', icon: Cube, label: '几何组件', component: GeometryAttrPanel, isShow: isMesh, requiresSelection: true },
+      { name: 'material-tab', icon: TextureOutlined, label: '材质组件', component: MaterialAttrPanel, isShow: isMesh, requiresSelection: true },
+      { name: 'project-tab', icon: SettingsOutline, label: '工程属性', component: ProjectAttrPanel, isShow: true, requiresSelection: false },
+      { name: 'plugin-tab', icon: ExtensionPuzzleOutline, label: '插件管理', component: PluginManagerPanel, isShow: true, requiresSelection: false },
+    ]
+
+    const leftPluginPanels = pluginPanels.value
+      .filter(p => p.position === 'left')
+      .map(p => ({
+        name: `plugin-panel:${p.id}`,
+        icon: p.icon ?? ExtensionPuzzleOutline,
+        label: p.name,
+        component: p.component,
+        isShow: true,
+        requiresSelection: false
+      }))
+
+    return [...baseTabs, ...leftPluginPanels].filter(tab => tab.isShow)
   })
 
   function handleChangeTransformMode(mode: 'translate' | 'rotate' | 'scale', event: Event) {
@@ -609,8 +625,7 @@
           </n-popover>
         </template>
         <!-- 属性面板内容 -->
-        <component v-if="tab.name === 'project-tab'" :is="tab.component" />
-        <component v-else-if="tab.name === 'plugin-tab'" :is="tab.component" />
+        <component v-if="tab.requiresSelection === false" :is="tab.component" />
         <component v-else-if="sceneStore.currentObjectData" :is="tab.component" />
         <n-empty v-else description="未选择对象" />
       </n-tab-pane>
@@ -620,8 +635,14 @@
 
 <style scoped>
   .n-float-button-active {
-    background-color: #409eff !important;
-    color: white;
+    background-color: var(--n-primary-color, #18a058) !important;
+    color: #fff;
+  }
+  .n-float-button-active:hover {
+    background-color: var(--n-primary-color-hover, #36ad6a) !important;
+  }
+  .n-float-button-active:active {
+    background-color: var(--n-primary-color-pressed, #0c7a43) !important;
   }
   .n-float-button-disabled {
     color: #90A4AE;

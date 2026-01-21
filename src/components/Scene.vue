@@ -4,6 +4,9 @@
   import { useSceneStore } from '@/stores/modules/useScene.store'
   import { sceneApi } from '@/services/sceneApi'
   import { useDialog, useNotification, useMessage } from 'naive-ui'
+  import { pluginManager } from '@/core'
+  import { useAnimationStore } from '@/stores/modules/useAnimation.store'
+  import { dialogOverlayPlugin } from '@/plugins/dialogOverlay.plugin'
 
   /**
    * 3D 视图容器组件：
@@ -22,8 +25,9 @@
   }>()
 
   const sceneStore = useSceneStore()
+  const animationStore = useAnimationStore()
   const message = useMessage()
-  const { container, init, switchScene, captureScreenshot } = useRenderer()
+  const { container, camera, init, switchScene, captureScreenshot } = useRenderer()
   
   // container 在模板中使用 ref="container"
   // @ts-ignore - Vue 模板中的 ref 绑定
@@ -122,12 +126,78 @@
     // 场景切换和资产加载完成后，检查是否有自动播放的剪辑
     const { useAnimationStore } = await import('@/stores/modules/useAnimation.store')
     const animationStore = useAnimationStore()
-    const autoPlayClip = animationStore.clips.find(clip => clip.playMode === 'auto')
-    if (autoPlayClip) {
-      // 资产已加载完成，可以直接播放动画
-      animationStore.playClip(autoPlayClip.id)
-      console.log('[Scene] 自动播放剪辑:', autoPlayClip.name, '（所有资产已加载完成）')
+    
+    // 获取所有启用且自动播放的剪辑
+    const enabledAutoPlayClips = animationStore.clips.filter(
+      clip => clip.playMode === 'auto' && (clip.enabled ?? true)
+    )
+    
+    if (enabledAutoPlayClips.length === 0) {
+      return
     }
+    
+    // 检查是否排队播放（以第一个剪辑的设置为准）
+    const firstClip = enabledAutoPlayClips[0]
+    if (!firstClip) return
+    
+    const shouldQueue = firstClip.queueOnAutoPlay ?? true
+    
+    if (!shouldQueue) {
+      // 不排队：同时播放所有启用的自动播放剪辑（使用后台播放）
+      console.log(`[Scene] 同时播放 ${enabledAutoPlayClips.length} 个自动播放剪辑（不排队）`)
+      for (const clip of enabledAutoPlayClips) {
+        console.log(`[Scene] 启动剪辑: ${clip.name}`)
+        // 第一个剪辑作为前台播放（用于时间轴显示），其他使用后台播放
+        if (clip === firstClip) {
+          animationStore.playClip(clip.id)
+        } else {
+          animationStore.playClip(clip.id, { background: true })
+        }
+      }
+      return
+    }
+    
+    // 排队播放：收集所有设置了排队的自动播放剪辑
+    const queuedClips = enabledAutoPlayClips.filter(clip => clip.queueOnAutoPlay !== false)
+    
+    if (queuedClips.length === 0) {
+      // 如果没有排队的剪辑，只播放第一个
+      console.log('[Scene] 自动播放剪辑（无排队剪辑，只播放第一个）:', firstClip.name)
+      animationStore.playClip(firstClip.id)
+      return
+    }
+    
+    // 递归函数：依次播放所有排队的自动播放剪辑
+    function playNextAutoClip(index: number) {
+      if (index >= queuedClips.length) {
+        console.log('[Scene] 所有排队的自动播放剪辑已播放完成')
+        return
+      }
+      
+      const clip = queuedClips[index]
+      if (!clip) {
+        console.warn(`[Scene] 索引 ${index} 的剪辑不存在`)
+        return
+      }
+      
+      const clipName = clip.name
+      const clipId = clip.id
+      
+      console.log(`[Scene] 自动播放剪辑 [${index + 1}/${queuedClips.length}]:`, clipName)
+      
+      // 播放当前剪辑，并在完成时播放下一个
+      animationStore.playClip(clipId, {
+        onComplete: () => {
+          console.log(`[Scene] 剪辑 "${clipName}" 播放完成，准备播放下一个`)
+          // 播放下一个排队的自动播放剪辑
+          playNextAutoClip(index + 1)
+        }
+      })
+    }
+    
+    // 从第一个开始播放
+    playNextAutoClip(0)
+    console.log(`[Scene] 开始播放 ${queuedClips.length} 个排队的自动播放剪辑`)
   }
 
   // 监听 sceneId 变化，支持动态切换场景
@@ -145,6 +215,17 @@
 
     // 初始化渲染器（只执行一次）
     init()
+
+    // 设置插件系统上下文（只设置一次；three 引用会在渲染循环里同步）
+    if (!pluginManager.getContext()) {
+      const ctx = pluginManager.createContext(
+        { scene: sceneStore as any, animation: animationStore as any },
+        { scene: sceneStore.threeScene as any, camera: camera.value as any, renderer: sceneStore.renderer as any }
+      )
+      pluginManager.setContext(ctx)
+      // 安装弹窗插件
+      await pluginManager.register(dialogOverlayPlugin)
+    }
     
     // 设置截图函数到 store
     sceneStore.setCaptureScreenshotFn(captureScreenshot)

@@ -27,6 +27,10 @@ export interface AnimationClip {
   loopCount: number
   /** 播放模式：'auto' 进入场景就播放，'manual' 手动调用 */
   playMode: 'auto' | 'manual'
+  /** 是否启用（控制是否参与自动播放） */
+  enabled?: boolean
+  /** 自动播放时是否排队（true=排队顺序播放，false=同时播放） */
+  queueOnAutoPlay?: boolean
   /** 播放完成后是否重置到开始位置 */
   resetOnComplete: boolean
   /** 包含的动画轨道 */
@@ -378,6 +382,8 @@ export interface PlayAnimationOptions {
   onComplete?: () => void
   /** 每次循环完成后的回调 */
   onLoop?: () => void
+  /** 是否后台播放（不改变 activeClipId，用于同时播放多个剪辑） */
+  background?: boolean
 }
 
 /**
@@ -407,6 +413,8 @@ export interface SerializedAnimationClip {
   loop: boolean
   loopCount: number
   playMode?: 'auto' | 'manual'  // 可选以兼容旧数据
+  enabled?: boolean  // 可选以兼容旧数据
+  queueOnAutoPlay?: boolean  // 可选以兼容旧数据
   resetOnComplete?: boolean  // 可选以兼容旧数据
   tracks: AnimationTrack[]
   createdAt: string  // ISO 日期字符串

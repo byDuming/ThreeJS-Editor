@@ -424,7 +424,7 @@
 }
 
 .resize-handle:hover {
-  background: rgba(64, 158, 255, 0.5);
+  background: var(--n-primary-color, rgba(24, 160, 88, 0.5));
 }
 
 .panel-header {
@@ -474,8 +474,8 @@
 }
 
 .mode-tab.active {
-  color: #409eff;
-  background: rgba(64, 158, 255, 0.1);
+  color: var(--n-primary-color, #18a058);
+  background: var(--n-primary-color-pressed, rgba(24, 160, 88, 0.1));
 }
 
 .header-right {
@@ -525,9 +525,9 @@
 }
 
 .category-item.active {
-  color: #409eff;
+  color: var(--n-primary-color, #18a058);
   /* background: rgba(64, 158, 255, 0.1); */
-  border-left: 2px solid #409eff;
+  border-left: 2px solid var(--n-primary-color, #18a058);
 }
 
 .asset-content {

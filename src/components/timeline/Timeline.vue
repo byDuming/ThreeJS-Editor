@@ -9,7 +9,7 @@
  * - 播放指针
  */
 
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useAnimationStore } from '@/stores/modules/useAnimation.store'
 import { useSceneStore } from '@/stores/modules/useScene.store'
 import { useMessage, useDialog } from 'naive-ui'
@@ -106,9 +106,14 @@ function handleAddKeyframe() {
 
 // 时间轴容器引用
 const timelineContainer = ref<HTMLElement | null>(null)
+// 左侧标签列表引用
+const trackLabelsList = ref<HTMLElement | null>(null)
 
 // 拖拽状态
 const isDraggingCursor = ref(false)
+
+// 滚动同步标志（防止循环更新）
+const isSyncingScroll = ref(false)
 
 // 计算像素到时间的转换
 const pixelsPerSecond = computed(() => 100 * animationStore.timelineView.zoom)
@@ -195,7 +200,9 @@ function handleTimelineClick(event: MouseEvent) {
   if (!timelineContainer.value || !animationStore.activeClip) return
   
   const rect = timelineContainer.value.getBoundingClientRect()
-  const x = event.clientX - rect.left + animationStore.timelineView.scrollX
+  // 使用实际滚动位置而不是 store 中的值
+  const scrollLeft = timelineContainer.value.scrollLeft
+  const x = event.clientX - rect.left + scrollLeft
   const time = pixelsToTime(x)
   
   animationStore.seek(Math.max(0, Math.min(time, animationStore.activeClip.duration)))
@@ -212,7 +219,9 @@ function handleCursorDrag(event: MouseEvent) {
   if (!isDraggingCursor.value || !timelineContainer.value || !animationStore.activeClip) return
   
   const rect = timelineContainer.value.getBoundingClientRect()
-  const x = event.clientX - rect.left + animationStore.timelineView.scrollX
+  // 使用实际滚动位置而不是 store 中的值
+  const scrollLeft = timelineContainer.value.scrollLeft
+  const x = event.clientX - rect.left + scrollLeft
   const time = pixelsToTime(x)
   
   animationStore.seek(Math.max(0, Math.min(time, animationStore.activeClip.duration)))
@@ -362,12 +371,80 @@ const clipOptions = computed(() =>
   }))
 )
 
+// 处理右侧时间轴容器的滚动（同步到左侧标签列表和更新 store）
+function handleTimelineScroll() {
+  if (!timelineContainer.value || isSyncingScroll.value) return
+  
+  isSyncingScroll.value = true
+  
+  const scrollLeft = timelineContainer.value.scrollLeft
+  const scrollTop = timelineContainer.value.scrollTop
+  
+  // 同步左侧标签列表的垂直滚动
+  if (trackLabelsList.value) {
+    trackLabelsList.value.scrollTop = scrollTop
+  }
+  
+  // 更新 store 中的滚动位置
+  animationStore.timelineView.scrollX = scrollLeft
+  animationStore.timelineView.scrollY = scrollTop
+  
+  isSyncingScroll.value = false
+}
+
+// 处理左侧标签列表的滚动（同步到右侧时间轴容器）
+function handleLabelsScroll() {
+  if (!trackLabelsList.value || !timelineContainer.value || isSyncingScroll.value) return
+  
+  isSyncingScroll.value = true
+  
+  const scrollTop = trackLabelsList.value.scrollTop
+  
+  // 同步右侧时间轴容器的垂直滚动
+  timelineContainer.value.scrollTop = scrollTop
+  
+  // 更新 store 中的垂直滚动位置
+  animationStore.timelineView.scrollY = scrollTop
+  
+  isSyncingScroll.value = false
+}
+
+// 设置滚动监听器
+function setupScrollListeners() {
+  if (timelineContainer.value) {
+    timelineContainer.value.addEventListener('scroll', handleTimelineScroll)
+  }
+  if (trackLabelsList.value) {
+    trackLabelsList.value.addEventListener('scroll', handleLabelsScroll)
+  }
+}
+
+// 移除滚动监听器
+function removeScrollListeners() {
+  if (timelineContainer.value) {
+    timelineContainer.value.removeEventListener('scroll', handleTimelineScroll)
+  }
+  if (trackLabelsList.value) {
+    trackLabelsList.value.removeEventListener('scroll', handleLabelsScroll)
+  }
+}
+
+// 监听 ref 变化，确保在 DOM 元素可用时添加监听器
+watch([timelineContainer, trackLabelsList], () => {
+  nextTick(() => {
+    removeScrollListeners()
+    setupScrollListeners()
+  })
+}, { immediate: true })
+
 onMounted(() => {
   window.addEventListener('keydown', handleKeyDown)
+  setupScrollListeners()
 })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
+  removeScrollListeners()
 })
 </script>
 
@@ -471,7 +548,7 @@ onUnmounted(() => {
       <!-- 左侧轨道标签 -->
       <div class="track-labels">
         <div class="track-labels-header">轨道</div>
-        <div class="track-labels-list">
+        <div class="track-labels-list" ref="trackLabelsList">
           <template v-for="group in groupedTracks" :key="group.objectId">
             <div 
               class="track-group-header"
@@ -562,14 +639,16 @@ onUnmounted(() => {
           </template>
         </div>
         
-        <!-- 播放指针 -->
-        <div 
-          class="playhead"
-          :style="{ left: `${cursorPosition}px` }"
-          @mousedown="handleCursorDragStart"
-        >
-          <div class="playhead-head"></div>
-          <div class="playhead-line"></div>
+        <!-- 播放指针（纵向固定：用 translateY 抵消滚动；不占布局） -->
+        <div class="playhead-layer" :style="{ width: `${timelineWidth}px`, transform: `translateY(${animationStore.timelineView.scrollY}px)` }">
+          <div 
+            class="playhead"
+            :style="{ left: `${cursorPosition}px` }"
+            @mousedown="handleCursorDragStart"
+          >
+            <div class="playhead-head"></div>
+            <div class="playhead-line"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -823,6 +902,16 @@ onUnmounted(() => {
   background: #f0f0f0;
 }
 
+/* 播放指针覆盖层：绝对覆盖，不参与布局 */
+.playhead-layer {
+  position: absolute;
+  top: 30px; /* 时间刻度条高度（TimelineHeader 为 30px） */
+  left: 0;
+  bottom: 0;
+  pointer-events: none; /* 不遮挡时间轴点击/选择 */
+  z-index: 20; /* 高于轨道内容，低于可能的弹层 */
+}
+
 /* 播放指针 */
 .playhead {
   position: absolute;
@@ -831,6 +920,7 @@ onUnmounted(() => {
   width: 1px;
   cursor: ew-resize;
   z-index: 100;
+  pointer-events: auto; /* 允许拖拽播放指针 */
 }
 
 .playhead-head {

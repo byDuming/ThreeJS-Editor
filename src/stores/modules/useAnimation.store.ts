@@ -196,6 +196,22 @@ export const useAnimationStore = defineStore('animation', () => {
   let animationFrameId: number | null = null
   let lastFrameTime = 0
   
+  /** 后台播放的剪辑状态（用于同时播放多个剪辑） */
+  interface BackgroundClipState {
+    clipId: string
+    currentTime: number
+    speed: number
+    direction: PlaybackDirection
+    loop: boolean
+    loopCount: number
+    lastFrameTime: number
+    onComplete?: () => void
+    onLoop?: () => void
+    frameId: number | null
+  }
+  
+  const backgroundClips = ref<Map<string, BackgroundClipState>>(new Map())
+  
   /** 事件监听器 */
   const eventListeners = shallowRef<AnimationEventListener[]>([])
 
@@ -214,6 +230,8 @@ export const useAnimationStore = defineStore('animation', () => {
       loop: params.loop ?? false,
       loopCount: -1,
       playMode: 'manual',
+      enabled: true, // 默认启用
+      queueOnAutoPlay: true, // 默认排队播放
       resetOnComplete: true,
       tracks: [],
       createdAt: now,
@@ -902,10 +920,14 @@ export const useAnimationStore = defineStore('animation', () => {
   /**
    * 在指定时间应用动画
    */
-  function applyAnimationAtTime(time: number) {
-    if (!activeClip.value) return
+  function applyAnimationAtTime(time: number, clipId?: string) {
+    const clip = clipId 
+      ? clips.value.find(c => c.id === clipId)
+      : activeClip.value
     
-    for (const track of activeClip.value.tracks) {
+    if (!clip) return
+    
+    for (const track of clip.tracks) {
       if (!track.enabled || track.keyframes.length === 0) continue
       
       const value = interpolateTrack(track, time)
@@ -913,6 +935,99 @@ export const useAnimationStore = defineStore('animation', () => {
         setPropertyValue(track.targetId, track.property, value)
       }
     }
+  }
+  
+  /**
+   * 后台剪辑的播放循环
+   */
+  function backgroundTick(clipId: string) {
+    const state = backgroundClips.value.get(clipId)
+    if (!state) return
+    
+    const clip = clips.value.find(c => c.id === clipId)
+    if (!clip) {
+      // 剪辑已删除，停止播放
+      stopBackgroundClip(clipId)
+      return
+    }
+    
+    const now = performance.now()
+    const delta = (now - state.lastFrameTime) / 1000 * state.speed
+    state.lastFrameTime = now
+    
+    // 更新时间
+    if (state.direction === 'forward') {
+      state.currentTime += delta
+    } else if (state.direction === 'backward') {
+      state.currentTime -= delta
+    }
+    
+    // 处理边界
+    if (state.currentTime >= clip.duration) {
+      if (state.loop) {
+        state.loopCount++
+        if (clip.loopCount > 0 && state.loopCount >= clip.loopCount) {
+          // 循环完成
+          stopBackgroundClip(clipId)
+          if (state.onComplete) state.onComplete()
+          return
+        }
+        
+        if (state.direction === 'pingpong') {
+          state.direction = 'backward'
+          state.currentTime = clip.duration
+        } else {
+          state.currentTime = state.currentTime % clip.duration
+        }
+        
+        if (state.onLoop) state.onLoop()
+      } else {
+        state.currentTime = clip.duration
+        stopBackgroundClip(clipId)
+        if (state.onComplete) state.onComplete()
+        return
+      }
+    } else if (state.currentTime <= 0) {
+      if (state.loop && state.direction === 'pingpong') {
+        state.direction = 'forward'
+        state.currentTime = 0
+        state.loopCount++
+        
+        if (clip.loopCount > 0 && state.loopCount >= clip.loopCount) {
+          stopBackgroundClip(clipId)
+          if (state.onComplete) state.onComplete()
+          return
+        }
+        
+        if (state.onLoop) state.onLoop()
+      } else if (state.direction === 'backward') {
+        state.currentTime = 0
+        stopBackgroundClip(clipId)
+        if (state.onComplete) state.onComplete()
+        return
+      }
+    }
+    
+    // 应用动画
+    applyAnimationAtTime(state.currentTime, clipId)
+    
+    // 继续下一帧
+    state.frameId = requestAnimationFrame(() => backgroundTick(clipId))
+  }
+  
+  /**
+   * 停止后台播放的剪辑
+   */
+  function stopBackgroundClip(clipId: string) {
+    const state = backgroundClips.value.get(clipId)
+    if (!state) {
+      backgroundClips.value.delete(clipId)
+      return
+    }
+    if (state.frameId !== null) {
+      cancelAnimationFrame(state.frameId)
+    }
+    backgroundClips.value.delete(clipId)
   }
 
   // ==================== 事件系统 ====================
@@ -1032,6 +1147,8 @@ export const useAnimationStore = defineStore('animation', () => {
     return {
       ...data,
       playMode: data.playMode ?? 'manual',  // 兼容旧数据，默认为手动
+      enabled: data.enabled ?? true,  // 兼容旧数据，默认为启用
+      queueOnAutoPlay: data.queueOnAutoPlay ?? true,  // 兼容旧数据，默认为排队
       resetOnComplete: data.resetOnComplete ?? true,  // 兼容旧数据，默认为重置
       createdAt: new Date(data.createdAt),
       updatedAt: new Date(data.updatedAt)
@@ -1120,7 +1237,38 @@ export const useAnimationStore = defineStore('animation', () => {
       return false
     }
     
-    // 设置为活动剪辑
+    // 如果是后台播放，使用独立的播放循环
+    if (options.background) {
+      // 停止之前的后台播放（如果存在）
+      stopBackgroundClip(clipId)
+      
+      const startTime = options.startTime ?? 0
+      const state: BackgroundClipState = {
+        clipId,
+        currentTime: startTime,
+        speed: options.speed ?? 1,
+        direction: options.direction ?? 'forward',
+        loop: options.loop ?? clip.loop,
+        loopCount: 0,
+        lastFrameTime: performance.now(),
+        onComplete: options.onComplete ?? undefined,
+        onLoop: options.onLoop ?? undefined,
+        frameId: null
+      }
+      
+      backgroundClips.value.set(clipId, state)
+      
+      // 应用初始状态
+      applyAnimationAtTime(startTime, clipId)
+      
+      // 开始播放循环
+      state.frameId = requestAnimationFrame(() => backgroundTick(clipId))
+      
+      console.log(`[Animation] 后台播放剪辑: ${clip.name}`, options)
+      return true
+    }
+    
+    // 前台播放：设置为活动剪辑
     activeClipId.value = clipId
     
     // 应用选项

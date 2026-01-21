@@ -173,6 +173,25 @@ const playModeOptions = [
         {{ animationStore.activeClip.resetOnComplete ? '重置' : '保持' }}
       </span>
       
+      <!-- 是否启动（控制是否参与自动播放） -->
+      <n-tooltip v-if="animationStore.activeClip && animationStore.activeClip.playMode === 'auto'">
+        <template #trigger>
+          <n-switch
+            :value="animationStore.activeClip.enabled ?? true"
+            size="small"
+            @update:value="(value: boolean) => animationStore.activeClip && animationStore.updateClip(animationStore.activeClip.id, { enabled: value })"
+          />
+        </template>
+        {{ (animationStore.activeClip?.enabled ?? true) ? '已启用，将参与自动播放' : '已禁用，不会自动播放' }}
+      </n-tooltip>
+      <span 
+        v-if="animationStore.activeClip && animationStore.activeClip.playMode === 'auto'" 
+        class="enabled-label" 
+        :title="(animationStore.activeClip.enabled ?? true) ? '剪辑已启用，将参与自动播放' : '剪辑已禁用，不会自动播放'"
+      >
+        {{ (animationStore.activeClip.enabled ?? true) ? '启用' : '禁用' }}
+      </span>
+      
       <!-- 播放模式 -->
       <n-select
         v-if="animationStore.activeClip"
@@ -183,6 +202,25 @@ const playModeOptions = [
         @update:value="(value: 'auto' | 'manual') => animationStore.activeClip && animationStore.updateClip(animationStore.activeClip.id, { playMode: value })"
         title="播放模式"
       />
+      
+      <!-- 自动播放时是否排队（只在自动播放模式时显示） -->
+      <n-tooltip v-if="animationStore.activeClip && animationStore.activeClip.playMode === 'auto'">
+        <template #trigger>
+          <n-switch
+            :value="animationStore.activeClip.queueOnAutoPlay ?? true"
+            size="small"
+            @update:value="(value: boolean) => animationStore.activeClip && animationStore.updateClip(animationStore.activeClip.id, { queueOnAutoPlay: value })"
+          />
+        </template>
+        {{ (animationStore.activeClip?.queueOnAutoPlay ?? true) ? '自动播放时排队顺序播放' : '自动播放时同时播放所有启用的剪辑' }}
+      </n-tooltip>
+      <span 
+        v-if="animationStore.activeClip && animationStore.activeClip.playMode === 'auto'" 
+        class="queue-label" 
+        :title="(animationStore.activeClip.queueOnAutoPlay ?? true) ? '多个自动播放剪辑将排队顺序播放' : '多个自动播放剪辑将同时播放'"
+      >
+        {{ (animationStore.activeClip.queueOnAutoPlay ?? true) ? '排队' : '同时' }}
+      </span>
       
       <!-- 播放速度 -->
       <n-select
@@ -261,6 +299,20 @@ const playModeOptions = [
 }
 
 .reset-label {
+  font-size: 11px;
+  color: #666;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
+.enabled-label {
+  font-size: 11px;
+  color: #666;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
+.queue-label {
   font-size: 11px;
   color: #666;
   margin-left: 4px;

@@ -1,6 +1,7 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
   import { computed } from 'vue'
   import { useSceneStore } from '@/stores/modules/useScene.store'
+  import NumberInput from './NumberInput.vue'
   import type {
     GeometryData,
     BoxGeometryData,
@@ -17,6 +18,9 @@
   } from '@/types/geometry'
 
   const sceneStore = useSceneStore()
+  
+  // 常量
+  const PI_2 = Math.PI * 2
 
   // 当前选中对象的几何体数据
   const geometry = computed(() => sceneStore.currentObjectData?.mesh?.geometry as GeometryData | undefined)
@@ -76,19 +80,40 @@
       <n-grid v-if="boxGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">宽度</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="boxGeometry?.width" placeholder="宽度" @update:value="(v:number) => updateGeometryNumber('width', v)" />
+          <NumberInput
+            :value="boxGeometry?.width"
+            @update:value="(v:number | null) => updateGeometryNumber('width', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="1000"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="boxGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">高度</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="boxGeometry?.height" placeholder="高度" @update:value="(v:number) => updateGeometryNumber('height', v)" />
+          <NumberInput
+            :value="boxGeometry?.height"
+            @update:value="(v:number | null) => updateGeometryNumber('height', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="1000"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="boxGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">深度</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="boxGeometry?.depth" placeholder="深度" @update:value="(v:number) => updateGeometryNumber('depth', v)" />
+          <NumberInput
+            :value="boxGeometry?.depth"
+            @update:value="(v:number | null) => updateGeometryNumber('depth', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="1000"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="boxGeometry" x-gap="6" :cols="10">
@@ -113,7 +138,14 @@
       <n-grid v-if="sphereGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">半径</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="sphereGeometry?.radius" placeholder="半径" @update:value="(v:number) => updateGeometryNumber('radius', v)" />
+          <NumberInput
+            :value="sphereGeometry?.radius"
+            @update:value="(v:number | null) => updateGeometryNumber('radius', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="1000"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="sphereGeometry" x-gap="6" :cols="10">
@@ -131,44 +163,93 @@
       <n-grid v-if="sphereGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">水平起始角</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="sphereGeometry?.phiStart" placeholder="水平起始角" @update:value="(v:number) => updateGeometryNumber('phiStart', v)" />
+          <NumberInput
+            :value="sphereGeometry?.phiStart"
+            @update:value="(v:number | null) => updateGeometryNumber('phiStart', v)"
+            :step="0.1"
+            :min="-PI_2"
+            :max="PI_2"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="sphereGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">水平扫描角</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="sphereGeometry?.phiLength" placeholder="水平扫描角" @update:value="(v:number) => updateGeometryNumber('phiLength', v)" />
+          <NumberInput
+            :value="sphereGeometry?.phiLength"
+            @update:value="(v:number | null) => updateGeometryNumber('phiLength', v)"
+            :step="0.1"
+            :min="0"
+            :max="PI_2"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="sphereGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">垂直起始角</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="sphereGeometry?.thetaStart" placeholder="垂直起始角" @update:value="(v:number) => updateGeometryNumber('thetaStart', v)" />
+          <NumberInput
+            :value="sphereGeometry?.thetaStart"
+            @update:value="(v:number | null) => updateGeometryNumber('thetaStart', v)"
+            :step="0.1"
+            :min="-PI_2"
+            :max="PI_2"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="sphereGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">垂直扫描角</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="sphereGeometry?.thetaLength" placeholder="垂直扫描角" @update:value="(v:number) => updateGeometryNumber('thetaLength', v)" />
+          <NumberInput
+            :value="sphereGeometry?.thetaLength"
+            @update:value="(v:number | null) => updateGeometryNumber('thetaLength', v)"
+            :step="0.1"
+            :min="0"
+            :max="PI_2"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
 
       <n-grid v-if="cylinderGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">顶部半径</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="cylinderGeometry?.radiusTop" placeholder="顶部半径" @update:value="(v:number) => updateGeometryNumber('radiusTop', v)" />
+          <NumberInput
+            :value="cylinderGeometry?.radiusTop"
+            @update:value="(v:number | null) => updateGeometryNumber('radiusTop', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="1000"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="cylinderGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">底部半径</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="cylinderGeometry?.radiusBottom" placeholder="底部半径" @update:value="(v:number) => updateGeometryNumber('radiusBottom', v)" />
+          <NumberInput
+            :value="cylinderGeometry?.radiusBottom"
+            @update:value="(v:number | null) => updateGeometryNumber('radiusBottom', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="1000"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="cylinderGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">高度</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="cylinderGeometry?.height" placeholder="高度" @update:value="(v:number) => updateGeometryNumber('height', v)" />
+          <NumberInput
+            :value="cylinderGeometry?.height"
+            @update:value="(v:number | null) => updateGeometryNumber('height', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="1000"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="cylinderGeometry" x-gap="6" :cols="10">
@@ -192,26 +273,54 @@
       <n-grid v-if="cylinderGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">起始角</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="cylinderGeometry?.thetaStart" placeholder="起始角" @update:value="(v:number) => updateGeometryNumber('thetaStart', v)" />
+          <NumberInput
+            :value="cylinderGeometry?.thetaStart"
+            @update:value="(v:number | null) => updateGeometryNumber('thetaStart', v)"
+            :step="0.1"
+            :min="-PI_2"
+            :max="PI_2"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="cylinderGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">扫描角</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="cylinderGeometry?.thetaLength" placeholder="扫描角" @update:value="(v:number) => updateGeometryNumber('thetaLength', v)" />
+          <NumberInput
+            :value="cylinderGeometry?.thetaLength"
+            @update:value="(v:number | null) => updateGeometryNumber('thetaLength', v)"
+            :step="0.1"
+            :min="0"
+            :max="PI_2"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
 
       <n-grid v-if="coneGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">底面半径</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="coneGeometry?.radius" placeholder="底面半径" @update:value="(v:number) => updateGeometryNumber('radius', v)" />
+          <NumberInput
+            :value="coneGeometry?.radius"
+            @update:value="(v:number | null) => updateGeometryNumber('radius', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="1000"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="coneGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">高度</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="coneGeometry?.height" placeholder="高度" @update:value="(v:number) => updateGeometryNumber('height', v)" />
+          <NumberInput
+            :value="coneGeometry?.height"
+            @update:value="(v:number | null) => updateGeometryNumber('height', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="1000"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="coneGeometry" x-gap="6" :cols="10">
@@ -235,26 +344,54 @@
       <n-grid v-if="coneGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">起始角</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="coneGeometry?.thetaStart" placeholder="起始角" @update:value="(v:number) => updateGeometryNumber('thetaStart', v)" />
+          <NumberInput
+            :value="coneGeometry?.thetaStart"
+            @update:value="(v:number | null) => updateGeometryNumber('thetaStart', v)"
+            :step="0.1"
+            :min="-PI_2"
+            :max="PI_2"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="coneGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">扫描角</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="coneGeometry?.thetaLength" placeholder="扫描角" @update:value="(v:number) => updateGeometryNumber('thetaLength', v)" />
+          <NumberInput
+            :value="coneGeometry?.thetaLength"
+            @update:value="(v:number | null) => updateGeometryNumber('thetaLength', v)"
+            :step="0.1"
+            :min="0"
+            :max="PI_2"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
 
       <n-grid v-if="planeGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">宽度</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="planeGeometry?.width" placeholder="宽度" @update:value="(v:number) => updateGeometryNumber('width', v)" />
+          <NumberInput
+            :value="planeGeometry?.width"
+            @update:value="(v:number | null) => updateGeometryNumber('width', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="1000"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="planeGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">高度</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="planeGeometry?.height" placeholder="高度" @update:value="(v:number) => updateGeometryNumber('height', v)" />
+          <NumberInput
+            :value="planeGeometry?.height"
+            @update:value="(v:number | null) => updateGeometryNumber('height', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="1000"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="planeGeometry" x-gap="6" :cols="10">
@@ -273,13 +410,27 @@
       <n-grid v-if="torusGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">主半径</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="torusGeometry?.radius" placeholder="主半径" @update:value="(v:number) => updateGeometryNumber('radius', v)" />
+          <NumberInput
+            :value="torusGeometry?.radius"
+            @update:value="(v:number | null) => updateGeometryNumber('radius', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="1000"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="torusGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">管道半径</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="torusGeometry?.tube" placeholder="管道半径" @update:value="(v:number) => updateGeometryNumber('tube', v)" />
+          <NumberInput
+            :value="torusGeometry?.tube"
+            @update:value="(v:number | null) => updateGeometryNumber('tube', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="1000"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="torusGeometry" x-gap="6" :cols="10">
@@ -297,20 +448,41 @@
       <n-grid v-if="torusGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">圆弧角</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="torusGeometry?.arc" placeholder="圆弧角" @update:value="(v:number) => updateGeometryNumber('arc', v)" />
+          <NumberInput
+            :value="torusGeometry?.arc"
+            @update:value="(v:number | null) => updateGeometryNumber('arc', v)"
+            :step="0.1"
+            :min="0"
+            :max="PI_2"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
 
       <n-grid v-if="torusKnotGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">主半径</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="torusKnotGeometry?.radius" placeholder="主半径" @update:value="(v:number) => updateGeometryNumber('radius', v)" />
+          <NumberInput
+            :value="torusKnotGeometry?.radius"
+            @update:value="(v:number | null) => updateGeometryNumber('radius', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="1000"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="torusKnotGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">管道半径</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="torusKnotGeometry?.tube" placeholder="管道半径" @update:value="(v:number) => updateGeometryNumber('tube', v)" />
+          <NumberInput
+            :value="torusKnotGeometry?.tube"
+            @update:value="(v:number | null) => updateGeometryNumber('tube', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="1000"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="torusKnotGeometry" x-gap="6" :cols="10">
@@ -341,7 +513,14 @@
       <n-grid v-if="polyhedronGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">半径</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="polyhedronGeometry?.radius" placeholder="半径" @update:value="(v:number) => updateGeometryNumber('radius', v)" />
+          <NumberInput
+            :value="polyhedronGeometry?.radius"
+            @update:value="(v:number | null) => updateGeometryNumber('radius', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="1000"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="polyhedronGeometry" x-gap="6" :cols="10">
@@ -354,7 +533,14 @@
       <n-grid v-if="circleGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">半径</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="circleGeometry?.radius" placeholder="半径" @update:value="(v:number) => updateGeometryNumber('radius', v)" />
+          <NumberInput
+            :value="circleGeometry?.radius"
+            @update:value="(v:number | null) => updateGeometryNumber('radius', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="1000"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="circleGeometry" x-gap="6" :cols="10">
@@ -366,26 +552,54 @@
       <n-grid v-if="circleGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">起始角</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="circleGeometry?.thetaStart" placeholder="起始角" @update:value="(v:number) => updateGeometryNumber('thetaStart', v)" />
+          <NumberInput
+            :value="circleGeometry?.thetaStart"
+            @update:value="(v:number | null) => updateGeometryNumber('thetaStart', v)"
+            :step="0.1"
+            :min="-PI_2"
+            :max="PI_2"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="circleGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">扫描角</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="circleGeometry?.thetaLength" placeholder="扫描角" @update:value="(v:number) => updateGeometryNumber('thetaLength', v)" />
+          <NumberInput
+            :value="circleGeometry?.thetaLength"
+            @update:value="(v:number | null) => updateGeometryNumber('thetaLength', v)"
+            :step="0.1"
+            :min="0"
+            :max="PI_2"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
 
       <n-grid v-if="ringGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">内半径</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="ringGeometry?.innerRadius" placeholder="内半径" @update:value="(v:number) => updateGeometryNumber('innerRadius', v)" />
+          <NumberInput
+            :value="ringGeometry?.innerRadius"
+            @update:value="(v:number | null) => updateGeometryNumber('innerRadius', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="1000"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="ringGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">外半径</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="ringGeometry?.outerRadius" placeholder="外半径" @update:value="(v:number) => updateGeometryNumber('outerRadius', v)" />
+          <NumberInput
+            :value="ringGeometry?.outerRadius"
+            @update:value="(v:number | null) => updateGeometryNumber('outerRadius', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="1000"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="ringGeometry" x-gap="6" :cols="10">
@@ -403,26 +617,54 @@
       <n-grid v-if="ringGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">起始角</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="ringGeometry?.thetaStart" placeholder="起始角" @update:value="(v:number) => updateGeometryNumber('thetaStart', v)" />
+          <NumberInput
+            :value="ringGeometry?.thetaStart"
+            @update:value="(v:number | null) => updateGeometryNumber('thetaStart', v)"
+            :step="0.1"
+            :min="-PI_2"
+            :max="PI_2"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="ringGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">扫描角</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="ringGeometry?.thetaLength" placeholder="扫描角" @update:value="(v:number) => updateGeometryNumber('thetaLength', v)" />
+          <NumberInput
+            :value="ringGeometry?.thetaLength"
+            @update:value="(v:number | null) => updateGeometryNumber('thetaLength', v)"
+            :step="0.1"
+            :min="0"
+            :max="PI_2"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
 
       <n-grid v-if="capsuleGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">半径</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="capsuleGeometry?.radius" placeholder="半径" @update:value="(v:number) => updateGeometryNumber('radius', v)" />
+          <NumberInput
+            :value="capsuleGeometry?.radius"
+            @update:value="(v:number | null) => updateGeometryNumber('radius', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="1000"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="capsuleGeometry" x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">中段长度</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number :value="capsuleGeometry?.length" placeholder="中段长度" @update:value="(v:number) => updateGeometryNumber('length', v)" />
+          <NumberInput
+            :value="capsuleGeometry?.length"
+            @update:value="(v:number | null) => updateGeometryNumber('length', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="1000"
+            :precision="3"
+          />
         </n-gi>
       </n-grid>
       <n-grid v-if="capsuleGeometry" x-gap="6" :cols="10">

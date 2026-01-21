@@ -1,8 +1,9 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
   import { computed, reactive } from 'vue'
   import type { UploadFileInfo } from 'naive-ui'
   import { useSceneStore } from '@/stores/modules/useScene.store'
   import { createDefaultMaterialData } from '@/utils/sceneFactory.ts'
+  import NumberInput from './NumberInput.vue'
   import type {
     MaterialData,
     MeshPhongMaterialData,
@@ -318,7 +319,14 @@
     <n-grid x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">透明度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="material?.opacity" placeholder="透明度" @update:value="(v:number) => updateMaterialNumber('opacity', v)" />
+        <NumberInput
+          :value="material?.opacity"
+          @update:value="(v:number | null) => updateMaterialNumber('opacity', v ?? 1)"
+          :step="0.01"
+          :min="0"
+          :max="1"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
     <n-grid x-gap="6" :cols="10">
@@ -399,13 +407,27 @@
     <n-grid v-if="(material as any)?.polygonOffset" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">偏移因子</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="(material as any)?.polygonOffsetFactor" placeholder="偏移因子" @update:value="(v:number) => updateMaterialNumber('polygonOffsetFactor', v)" />
+        <NumberInput
+          :value="(material as any)?.polygonOffsetFactor"
+          @update:value="(v:number | null) => updateMaterialNumber('polygonOffsetFactor', v ?? 0)"
+          :step="0.1"
+          :min="-10"
+          :max="10"
+          :precision="2"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="(material as any)?.polygonOffset" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">偏移单位</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="(material as any)?.polygonOffsetUnits" placeholder="偏移单位" @update:value="(v:number) => updateMaterialNumber('polygonOffsetUnits', v)" />
+        <NumberInput
+          :value="(material as any)?.polygonOffsetUnits"
+          @update:value="(v:number | null) => updateMaterialNumber('polygonOffsetUnits', v ?? 0)"
+          :step="0.1"
+          :min="-10"
+          :max="10"
+          :precision="2"
+        />
       </n-gi>
     </n-grid>
     <n-grid x-gap="6" :cols="10">
@@ -517,7 +539,14 @@
     <n-grid v-if="showLightMap" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">光照强度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="mapMaterial?.lightMapIntensity" placeholder="光照强度" @update:value="(v:number) => updateMaterialNumber('lightMapIntensity', v)" />
+        <NumberInput
+          :value="mapMaterial?.lightMapIntensity"
+          @update:value="(v:number | null) => updateMaterialNumber('lightMapIntensity', v ?? 1)"
+          :step="0.01"
+          :min="0"
+          :max="10"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showMapFields" x-gap="6" :cols="10">
@@ -571,7 +600,14 @@
     <n-grid v-if="showBumpMap" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">凹凸强度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="mapMaterial?.bumpScale" placeholder="凹凸强度" @update:value="(v:number) => updateMaterialNumber('bumpScale', v)" />
+        <NumberInput
+          :value="mapMaterial?.bumpScale"
+          @update:value="(v:number | null) => updateMaterialNumber('bumpScale', v ?? 1)"
+          :step="0.01"
+          :min="0"
+          :max="10"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showEnvMap" x-gap="6" :cols="10">
@@ -615,7 +651,14 @@
     <n-grid v-if="showEnvMap" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">环境强度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="mapMaterial?.envMapIntensity" placeholder="环境强度" @update:value="(v:number) => updateMaterialNumber('envMapIntensity', v)" />
+        <NumberInput
+          :value="mapMaterial?.envMapIntensity"
+          @update:value="(v:number | null) => updateMaterialNumber('envMapIntensity', v ?? 1)"
+          :step="0.01"
+          :min="0"
+          :max="10"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
 
@@ -646,7 +689,14 @@
     <n-grid v-if="showNormalDisplacement" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">法线强度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="normalDisplacementMaterial?.normalScale" placeholder="法线强度" @update:value="(v:number) => updateMaterialNumber('normalScale', v)" />
+        <NumberInput
+          :value="normalDisplacementMaterial?.normalScale"
+          @update:value="(v:number | null) => updateMaterialNumber('normalScale', v ?? 1)"
+          :step="0.01"
+          :min="0"
+          :max="10"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showNormalDisplacement" x-gap="6" :cols="10">
@@ -676,13 +726,27 @@
     <n-grid v-if="showNormalDisplacement" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">位移强度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="normalDisplacementMaterial?.displacementScale" placeholder="位移强度" @update:value="(v:number) => updateMaterialNumber('displacementScale', v)" />
+        <NumberInput
+          :value="normalDisplacementMaterial?.displacementScale"
+          @update:value="(v:number | null) => updateMaterialNumber('displacementScale', v ?? 0)"
+          :step="0.01"
+          :min="0"
+          :max="100"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showNormalDisplacement" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">位移偏移</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="normalDisplacementMaterial?.displacementBias" placeholder="位移偏移" @update:value="(v:number) => updateMaterialNumber('displacementBias', v)" />
+        <NumberInput
+          :value="normalDisplacementMaterial?.displacementBias"
+          @update:value="(v:number | null) => updateMaterialNumber('displacementBias', v ?? 0)"
+          :step="0.01"
+          :min="-10"
+          :max="10"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
 
@@ -699,7 +763,14 @@
     <n-grid v-if="showEmissive" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">自发光强度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="emissiveMaterial?.emissiveIntensity" placeholder="自发光强度" @update:value="(v:number) => updateMaterialNumber('emissiveIntensity', v)" />
+        <NumberInput
+          :value="emissiveMaterial?.emissiveIntensity"
+          @update:value="(v:number | null) => updateMaterialNumber('emissiveIntensity', v ?? 1)"
+          :step="0.01"
+          :min="0"
+          :max="10"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showEmissive" x-gap="6" :cols="10">
@@ -754,7 +825,14 @@
     <n-grid v-if="showAo" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">AO强度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="aoMaterial?.aoMapIntensity" placeholder="AO强度" @update:value="(v:number) => updateMaterialNumber('aoMapIntensity', v)" />
+        <NumberInput
+          :value="aoMaterial?.aoMapIntensity"
+          @update:value="(v:number | null) => updateMaterialNumber('aoMapIntensity', v ?? 1)"
+          :step="0.01"
+          :min="0"
+          :max="10"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
 
@@ -771,7 +849,14 @@
     <n-grid v-if="showPhong" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">高光强度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="phongMaterial?.shininess" placeholder="高光强度" @update:value="(v:number) => updateMaterialNumber('shininess', v)" />
+        <NumberInput
+          :value="phongMaterial?.shininess"
+          @update:value="(v:number | null) => updateMaterialNumber('shininess', v ?? 30)"
+          :step="1"
+          :min="0"
+          :max="1000"
+          :precision="0"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showPhong" x-gap="6" :cols="10">
@@ -802,13 +887,27 @@
     <n-grid v-if="showStandard" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">粗糙度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="standardMaterial?.roughness" placeholder="粗糙度" @update:value="(v:number) => updateMaterialNumber('roughness', v)" />
+        <NumberInput
+          :value="standardMaterial?.roughness"
+          @update:value="(v:number | null) => updateMaterialNumber('roughness', v ?? 1)"
+          :step="0.01"
+          :min="0"
+          :max="1"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showStandard" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">金属度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="standardMaterial?.metalness" placeholder="金属度" @update:value="(v:number) => updateMaterialNumber('metalness', v)" />
+        <NumberInput
+          :value="standardMaterial?.metalness"
+          @update:value="(v:number | null) => updateMaterialNumber('metalness', v ?? 0)"
+          :step="0.01"
+          :min="0"
+          :max="1"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showStandard" x-gap="6" :cols="10">
@@ -869,25 +968,53 @@
     <n-grid v-if="showPhysical" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">清漆强度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="physicalMaterial?.clearcoat" placeholder="清漆强度" @update:value="(v:number) => updateMaterialNumber('clearcoat', v)" />
+        <NumberInput
+          :value="physicalMaterial?.clearcoat"
+          @update:value="(v:number | null) => updateMaterialNumber('clearcoat', v ?? 0)"
+          :step="0.01"
+          :min="0"
+          :max="1"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showPhysical" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">清漆粗糙</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="physicalMaterial?.clearcoatRoughness" placeholder="清漆粗糙" @update:value="(v:number) => updateMaterialNumber('clearcoatRoughness', v)" />
+        <NumberInput
+          :value="physicalMaterial?.clearcoatRoughness"
+          @update:value="(v:number | null) => updateMaterialNumber('clearcoatRoughness', v ?? 0)"
+          :step="0.01"
+          :min="0"
+          :max="1"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showPhysical" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">折射率</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="physicalMaterial?.ior" placeholder="折射率" @update:value="(v:number) => updateMaterialNumber('ior', v)" />
+        <NumberInput
+          :value="physicalMaterial?.ior"
+          @update:value="(v:number | null) => updateMaterialNumber('ior', v ?? 1.5)"
+          :step="0.01"
+          :min="1"
+          :max="5"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showPhysical" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">透射强度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="physicalMaterial?.transmission" placeholder="透射强度" @update:value="(v:number) => updateMaterialNumber('transmission', v)" />
+        <NumberInput
+          :value="physicalMaterial?.transmission"
+          @update:value="(v:number | null) => updateMaterialNumber('transmission', v ?? 0)"
+          :step="0.01"
+          :min="0"
+          :max="1"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showPhysical" x-gap="6" :cols="10">
@@ -941,19 +1068,40 @@
     <n-grid v-if="showPhysical" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">厚度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="physicalMaterial?.thickness" placeholder="厚度" @update:value="(v:number) => updateMaterialNumber('thickness', v)" />
+        <NumberInput
+          :value="physicalMaterial?.thickness"
+          @update:value="(v:number | null) => updateMaterialNumber('thickness', v ?? 0)"
+          :step="0.1"
+          :min="0"
+          :max="10"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showPhysical" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">各向异性</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="physicalMaterial?.anisotropy" placeholder="各向异性" @update:value="(v:number) => updateMaterialNumber('anisotropy', v)" />
+        <NumberInput
+          :value="physicalMaterial?.anisotropy"
+          @update:value="(v:number | null) => updateMaterialNumber('anisotropy', v ?? 0)"
+          :step="0.01"
+          :min="0"
+          :max="1"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showPhysical" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">异性旋转</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="physicalMaterial?.anisotropyRotation" placeholder="异性旋转" @update:value="(v:number) => updateMaterialNumber('anisotropyRotation', v)" />
+        <NumberInput
+          :value="physicalMaterial?.anisotropyRotation"
+          @update:value="(v:number | null) => updateMaterialNumber('anisotropyRotation', v ?? 0)"
+          :step="0.01"
+          :min="0"
+          :max="1"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showPhysical" x-gap="6" :cols="10">
@@ -1007,7 +1155,14 @@
     <n-grid v-if="showPhysical" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">清漆法线强度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="physicalMaterial?.clearcoatNormalScale" placeholder="清漆法线强度" @update:value="(v:number) => updateMaterialNumber('clearcoatNormalScale', v)" />
+        <NumberInput
+          :value="physicalMaterial?.clearcoatNormalScale"
+          @update:value="(v:number | null) => updateMaterialNumber('clearcoatNormalScale', v ?? 1)"
+          :step="0.01"
+          :min="0"
+          :max="10"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
 
@@ -1063,7 +1218,14 @@
     <n-grid v-if="showPhysical" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">绒毛强度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="physicalMaterial?.sheen" placeholder="绒毛强度" @update:value="(v:number) => updateMaterialNumber('sheen', v)" />
+        <NumberInput
+          :value="physicalMaterial?.sheen"
+          @update:value="(v:number | null) => updateMaterialNumber('sheen', v ?? 0)"
+          :step="0.01"
+          :min="0"
+          :max="1"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showPhysical" x-gap="6" :cols="10">
@@ -1079,7 +1241,14 @@
     <n-grid v-if="showPhysical" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">绒毛粗糙</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="physicalMaterial?.sheenRoughness" placeholder="绒毛粗糙" @update:value="(v:number) => updateMaterialNumber('sheenRoughness', v)" />
+        <NumberInput
+          :value="physicalMaterial?.sheenRoughness"
+          @update:value="(v:number | null) => updateMaterialNumber('sheenRoughness', v ?? 1)"
+          :step="0.01"
+          :min="0"
+          :max="1"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showPhysical" x-gap="6" :cols="10">
@@ -1134,29 +1303,49 @@
     <n-grid v-if="showPhysical" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">彩虹强度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="physicalMaterial?.iridescence" placeholder="彩虹强度" @update:value="(v:number) => updateMaterialNumber('iridescence', v)" />
+        <NumberInput
+          :value="physicalMaterial?.iridescence"
+          @update:value="(v:number | null) => updateMaterialNumber('iridescence', v ?? 0)"
+          :step="0.01"
+          :min="0"
+          :max="1"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showPhysical" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">彩虹折射率</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="physicalMaterial?.iridescenceIOR" placeholder="彩虹折射率" @update:value="(v:number) => updateMaterialNumber('iridescenceIOR', v)" />
+        <NumberInput
+          :value="physicalMaterial?.iridescenceIOR"
+          @update:value="(v:number | null) => updateMaterialNumber('iridescenceIOR', v ?? 1.3)"
+          :step="0.01"
+          :min="1"
+          :max="5"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showPhysical" x-gap="6" :cols="11">
       <n-gi class="gid-item" :span="2">彩虹厚度</n-gi>
       <n-gi class="gid-item" :span="3">
-        <n-input-number
-          placeholder="min"
+        <NumberInput
           :value="physicalMaterial?.iridescenceThicknessRange?.[0]"
-          @update:value="(v:number) => updateMaterialVec2('iridescenceThicknessRange', 0, v, [100, 400])"
+          @update:value="(v:number | null) => updateMaterialVec2('iridescenceThicknessRange', 0, v ?? 100, [100, 400])"
+          :step="1"
+          :min="0"
+          :max="10000"
+          :precision="0"
         />
       </n-gi>
       <n-gi class="gid-item" :span="3">
-        <n-input-number
-          placeholder="max"
+        <NumberInput
           :value="physicalMaterial?.iridescenceThicknessRange?.[1]"
-          @update:value="(v:number) => updateMaterialVec2('iridescenceThicknessRange', 1, v, [100, 400])"
+          @update:value="(v:number | null) => updateMaterialVec2('iridescenceThicknessRange', 1, v ?? 400, [100, 400])"
+          :step="1"
+          :min="0"
+          :max="10000"
+          :precision="0"
         />
       </n-gi>
     </n-grid>
@@ -1212,7 +1401,14 @@
     <n-grid v-if="showPhysical" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">高光强度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="physicalMaterial?.specularIntensity" placeholder="高光强度" @update:value="(v:number) => updateMaterialNumber('specularIntensity', v)" />
+        <NumberInput
+          :value="physicalMaterial?.specularIntensity"
+          @update:value="(v:number | null) => updateMaterialNumber('specularIntensity', v ?? 1)"
+          :step="0.01"
+          :min="0"
+          :max="2"
+          :precision="3"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showPhysical" x-gap="6" :cols="10">
@@ -1287,7 +1483,14 @@
     <n-grid v-if="showPhysical" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">衰减距离</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="physicalMaterial?.attenuationDistance" placeholder="衰减距离" @update:value="(v:number) => updateMaterialNumber('attenuationDistance', v)" />
+        <NumberInput
+          :value="physicalMaterial?.attenuationDistance"
+          @update:value="(v:number | null) => updateMaterialNumber('attenuationDistance', v ?? 0)"
+          :step="0.1"
+          :min="0"
+          :max="100000"
+          :precision="2"
+        />
       </n-gi>
     </n-grid>
 
@@ -1373,26 +1576,54 @@
     <n-grid v-if="showLineDashed" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">虚线长度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="lineDashedMaterial?.dashSize" placeholder="虚线长度" @update:value="(v:number) => updateMaterialNumber('dashSize', v)" />
+        <NumberInput
+          :value="lineDashedMaterial?.dashSize"
+          @update:value="(v:number | null) => updateMaterialNumber('dashSize', v ?? 1)"
+          :step="0.1"
+          :min="0"
+          :max="1000"
+          :precision="2"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showLineDashed" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">间隔长度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="lineDashedMaterial?.gapSize" placeholder="间隔长度" @update:value="(v:number) => updateMaterialNumber('gapSize', v)" />
+        <NumberInput
+          :value="lineDashedMaterial?.gapSize"
+          @update:value="(v:number | null) => updateMaterialNumber('gapSize', v ?? 1)"
+          :step="0.1"
+          :min="0"
+          :max="1000"
+          :precision="2"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showLineDashed" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">比例</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="lineDashedMaterial?.scale" placeholder="比例" @update:value="(v:number) => updateMaterialNumber('scale', v)" />
+        <NumberInput
+          :value="lineDashedMaterial?.scale"
+          @update:value="(v:number | null) => updateMaterialNumber('scale', v ?? 1)"
+          :step="0.1"
+          :min="0"
+          :max="100"
+          :precision="2"
+        />
       </n-gi>
     </n-grid>
 
     <n-grid v-if="showPoints" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">点大小</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number :value="pointsMaterial?.size" placeholder="点大小" @update:value="(v:number) => updateMaterialNumber('size', v)" />
+        <NumberInput
+          :value="pointsMaterial?.size"
+          @update:value="(v:number | null) => updateMaterialNumber('size', v ?? 1)"
+          :step="0.1"
+          :min="0"
+          :max="1000"
+          :precision="2"
+        />
       </n-gi>
     </n-grid>
     <n-grid v-if="showPoints" x-gap="6" :cols="10">

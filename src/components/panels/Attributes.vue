@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { useSceneStore } from '@/stores/modules/useScene.store'
+  import NumberInput from './NumberInput.vue'
 
   const sceneStore = useSceneStore()
 
@@ -49,203 +50,235 @@
   <span>属性面板</span>
   <br />
   <br />
-  <n-flex class="n-flex" vertical>
-    <n-grid x-gap="12" :cols="8">
-      <n-gi class="gid-item" :span="2">
-        ID
-      </n-gi>
-      <n-gi class="gid-item" :span="6">
-        <n-input :value="sceneStore.currentObjectData?.id" type="text" placeholder="ID" disabled />
-      </n-gi>
-    </n-grid>
-    <n-grid x-gap="12" :cols="8">
-      <n-gi class="gid-item" :span="2">
-        类型
-      </n-gi>
-      <n-gi class="gid-item" :span="6">
-        <n-input :value="sceneStore.currentObjectData?.type" type="text" placeholder="类型" disabled />
-      </n-gi>
-    </n-grid>
+  <n-scrollbar style="max-height: 100%;" content-style="overflow: hidden;">
+    <n-flex class="n-flex" vertical>
+      <n-grid x-gap="12" :cols="8">
+        <n-gi class="gid-item" :span="2">
+          ID
+        </n-gi>
+        <n-gi class="gid-item" :span="6">
+          <n-input :value="sceneStore.currentObjectData?.id" type="text" placeholder="ID" disabled />
+        </n-gi>
+      </n-grid>
+      <n-grid x-gap="12" :cols="8">
+        <n-gi class="gid-item" :span="2">
+          类型
+        </n-gi>
+        <n-gi class="gid-item" :span="6">
+          <n-input :value="sceneStore.currentObjectData?.type" type="text" placeholder="类型" disabled />
+        </n-gi>
+      </n-grid>
 
-    <br />
-    <!-- 位置 -->
-    <n-grid x-gap="6" :cols="11">
-      <n-gi class="gid-item" :span="2">
-        位置
-      </n-gi>
-      <n-gi class="gid-item" :span="3">
-        <n-input-number
-          placeholder="X"
-          :value="sceneStore.currentObjectData?.transform.position[0]"
-          @update:value="(v:number) => updateTransform('position', 0, v)"
-          :show-button="false"
-        />
-      </n-gi>
-      <n-gi class="gid-item" :span="3">
-        <n-input-number
-          placeholder="Y"
-          :value="sceneStore.currentObjectData?.transform.position[1]"
-          @update:value="(v:number) => updateTransform('position', 1, v)"
-          :show-button="false"
-        />
-      </n-gi>
-      <n-gi class="gid-item" :span="3">
-        <n-input-number
-          placeholder="Z"
-          :value="sceneStore.currentObjectData?.transform.position[2]"
-          @update:value="(v:number) => updateTransform('position', 2, v)"
-          :show-button="false"
-        />
-      </n-gi>
-    </n-grid>
+      <br />
+      <!-- 位置 -->
+      <n-grid x-gap="6" :cols="11">
+        <n-gi class="gid-item" :span="2">
+          位置
+        </n-gi>
+        <n-gi class="gid-item" :span="3">
+          <NumberInput
+            label="X"
+            :value="sceneStore.currentObjectData?.transform.position[0]"
+            @update:value="(v:number | null) => updateTransform('position', 0, v ?? 0)"
+            :step="0.1"
+            :min="-1000"
+            :max="1000"
+            :precision="3"
+          />
+        </n-gi>
+        <n-gi class="gid-item" :span="3">
+          <NumberInput
+            label="Y"
+            :value="sceneStore.currentObjectData?.transform.position[1]"
+            @update:value="(v:number | null) => updateTransform('position', 1, v ?? 0)"
+            :step="0.1"
+            :min="-1000"
+            :max="1000"
+            :precision="3"
+          />
+        </n-gi>
+        <n-gi class="gid-item" :span="3">
+          <NumberInput
+            label="Z"
+            :value="sceneStore.currentObjectData?.transform.position[2]"
+            @update:value="(v:number | null) => updateTransform('position', 2, v ?? 0)"
+            :step="0.1"
+            :min="-1000"
+            :max="1000"
+            :precision="3"
+          />
+        </n-gi>
+      </n-grid>
 
-    <br />
-    <!-- 旋转 -->
-    <n-grid x-gap="6" :cols="11">
-      <n-gi class="gid-item" :span="2">
-        旋转
-      </n-gi>
-      <n-gi class="gid-item" :span="3">
-        <n-input-number
-          placeholder="X"
-          :value="sceneStore.currentObjectData?.transform.rotation[0]"
-          @update:value="(v:number) => updateTransform('rotation', 0, v)"
-          :show-button="false"
-        />
-      </n-gi>
-      <n-gi class="gid-item" :span="3">
-        <n-input-number
-          placeholder="Y"
-          :value="sceneStore.currentObjectData?.transform.rotation[1]"
-          @update:value="(v:number) => updateTransform('rotation', 1, v)"
-          :show-button="false"
-        />
-      </n-gi>
-      <n-gi class="gid-item" :span="3">
-        <n-input-number
-          placeholder="Z"
-          :value="sceneStore.currentObjectData?.transform.rotation[2]"
-          @update:value="(v:number) => updateTransform('rotation', 2, v)"
-          :show-button="false"
-        />
-      </n-gi>
-    </n-grid>
-    <n-grid x-gap="6" :cols="11">
-      <n-gi class="gid-item" :span="2"></n-gi>
-      <n-gi class="gid-item" :span="9">
-        <n-button size="tiny" @click="setHorizontalRotation">水平</n-button>
-      </n-gi>
-    </n-grid>
+      <br />
+      <!-- 旋转 -->
+      <n-grid x-gap="6" :cols="11">
+        <n-gi class="gid-item" :span="2">
+          旋转
+        </n-gi>
+        <n-gi class="gid-item" :span="3">
+          <NumberInput
+            label="X"
+            :value="sceneStore.currentObjectData?.transform.rotation[0]"
+            @update:value="(v:number | null) => updateTransform('rotation', 0, v ?? 0)"
+            :step="0.1"
+            :min="-Math.PI * 4"
+            :max="Math.PI * 4"
+            :precision="3"
+          />
+        </n-gi>
+        <n-gi class="gid-item" :span="3">
+          <NumberInput
+            label="Y"
+            :value="sceneStore.currentObjectData?.transform.rotation[1]"
+            @update:value="(v:number | null) => updateTransform('rotation', 1, v ?? 0)"
+            :step="0.1"
+            :min="-Math.PI * 4"
+            :max="Math.PI * 4"
+            :precision="3"
+          />
+        </n-gi>
+        <n-gi class="gid-item" :span="3">
+          <NumberInput
+            label="Z"
+            :value="sceneStore.currentObjectData?.transform.rotation[2]"
+            @update:value="(v:number | null) => updateTransform('rotation', 2, v ?? 0)"
+            :step="0.1"
+            :min="-Math.PI * 4"
+            :max="Math.PI * 4"
+            :precision="3"
+          />
+        </n-gi>
+      </n-grid>
+      <n-grid x-gap="6" :cols="11">
+        <n-gi class="gid-item" :span="2"></n-gi>
+        <n-gi class="gid-item" :span="9">
+          <n-button size="tiny" @click="setHorizontalRotation">水平</n-button>
+        </n-gi>
+      </n-grid>
 
-    <br />
-    <!-- 缩放 -->
-    <n-grid x-gap="6" :cols="11">
-      <n-gi class="gid-item" :span="2">
-        缩放
-      </n-gi>
-      <n-gi class="gid-item" :span="3">
-        <n-input-number
-          placeholder="X"
-          :value="sceneStore.currentObjectData?.transform.scale[0]"
-          @update:value="(v:number) => updateTransform('scale', 0, v)"
-          :show-button="false"
-        />
-      </n-gi>
-      <n-gi class="gid-item" :span="3">
-        <n-input-number
-          placeholder="Y"
-          :value="sceneStore.currentObjectData?.transform.scale[1]"
-          @update:value="(v:number) => updateTransform('scale', 1, v)"
-          :show-button="false"
-        />
-      </n-gi>
-      <n-gi class="gid-item" :span="3">
-        <n-input-number
-          placeholder="Z"
-          :value="sceneStore.currentObjectData?.transform.scale[2]"
-          @update:value="(v:number) => updateTransform('scale', 2, v)"
-          :show-button="false"
-        />
-      </n-gi>
-    </n-grid>
+      <br />
+      <!-- 缩放 -->
+      <n-grid x-gap="6" :cols="11">
+        <n-gi class="gid-item" :span="2">
+          缩放
+        </n-gi>
+        <n-gi class="gid-item" :span="3">
+          <NumberInput
+            label="X"
+            :value="sceneStore.currentObjectData?.transform.scale[0]"
+            @update:value="(v:number | null) => updateTransform('scale', 0, v ?? 1)"
+            :step="0.1"
+            :min="0"
+            :max="100"
+            :precision="3"
+          />
+        </n-gi>
+        <n-gi class="gid-item" :span="3">
+          <NumberInput
+            label="Y"
+            :value="sceneStore.currentObjectData?.transform.scale[1]"
+            @update:value="(v:number | null) => updateTransform('scale', 1, v ?? 1)"
+            :step="0.1"
+            :min="0"
+            :max="100"
+            :precision="3"
+          />
+        </n-gi>
+        <n-gi class="gid-item" :span="3">
+          <NumberInput
+            label="Z"
+            :value="sceneStore.currentObjectData?.transform.scale[2]"
+            @update:value="(v:number | null) => updateTransform('scale', 2, v ?? 1)"
+            :step="0.1"
+            :min="0"
+            :max="100"
+            :precision="3"
+          />
+        </n-gi>
+      </n-grid>
 
-    <br />
-    <!-- 可见性 -->
-    <n-grid x-gap="6" :cols="16">
-      <n-gi class="gid-item" :span="4">
-        可见
-      </n-gi>
-      <n-gi class="gid-item" :span="4">
-        <n-switch
-          :value="sceneStore.currentObjectData?.visible"
-          @update:value="(v:boolean) => updateVisible(v)"
-        />
-      </n-gi>
+      <br />
+      <!-- 可见性 -->
+      <n-grid x-gap="6" :cols="16">
+        <n-gi class="gid-item" :span="4">
+          可见
+        </n-gi>
+        <n-gi class="gid-item" :span="4">
+          <n-switch
+            :value="sceneStore.currentObjectData?.visible"
+            @update:value="(v:boolean) => updateVisible(v)"
+          />
+        </n-gi>
 
-      <n-gi class="gid-item" :span="5">
-        视锥体剔除
-      </n-gi>
-      <n-gi class="gid-item" :span="3">
-        <n-switch
-          :value="sceneStore.currentObjectData?.frustumCulled"
-          @update:value="(v:boolean) => updateFrustumCulled(v)"
-        />
-      </n-gi>
-    </n-grid>
-    <br />
-    <!-- 阴影 -->
-    <n-grid x-gap="6" :cols="16">
-      <n-gi class="gid-item" :span="4">
-        投射阴影
-      </n-gi>
-      <n-gi class="gid-item" :span="4">
-        <n-switch
-          :value="sceneStore.currentObjectData?.castShadow"
-          @update:value="(v:boolean) => sceneStore.updateSceneObjectData(sceneStore.selectedObjectId!, { castShadow: v } as any)"
-        />
-      </n-gi>
+        <n-gi class="gid-item" :span="5">
+          视锥体剔除
+        </n-gi>
+        <n-gi class="gid-item" :span="3">
+          <n-switch
+            :value="sceneStore.currentObjectData?.frustumCulled"
+            @update:value="(v:boolean) => updateFrustumCulled(v)"
+          />
+        </n-gi>
+      </n-grid>
+      <br />
+      <!-- 阴影 -->
+      <n-grid x-gap="6" :cols="16">
+        <n-gi class="gid-item" :span="4">
+          投射阴影
+        </n-gi>
+        <n-gi class="gid-item" :span="4">
+          <n-switch
+            :value="sceneStore.currentObjectData?.castShadow"
+            @update:value="(v:boolean) => sceneStore.updateSceneObjectData(sceneStore.selectedObjectId!, { castShadow: v } as any)"
+          />
+        </n-gi>
 
-      <n-gi class="gid-item" :span="5">
-        接收阴影
-      </n-gi>
-      <n-gi class="gid-item" :span="3">
-        <n-switch
-          :value="sceneStore.currentObjectData?.receiveShadow"
-          @update:value="(v:boolean) => sceneStore.updateSceneObjectData(sceneStore.selectedObjectId!, { receiveShadow: v } as any)"
-        />
-      </n-gi>
-    </n-grid>
-    <br />
-    <!-- 渲染顺序 -->
-    <n-grid x-gap="6" :cols="10">
-      <n-gi class="gid-item" :span="3">
-        渲染顺序
-      </n-gi>
-      <n-gi class="gid-item" :span="7">
-        <n-input-number
-          placeholder="从低到高"
-          :value="sceneStore.currentObjectData?.renderOrder"
-          :validator="(x: number) => x >= 0"
-          @update:value="(v:number) => sceneStore.updateSceneObjectData(sceneStore.selectedObjectId!, { renderOrder: v } as any)"
-        />
-      </n-gi>
-    </n-grid>
+        <n-gi class="gid-item" :span="5">
+          接收阴影
+        </n-gi>
+        <n-gi class="gid-item" :span="3">
+          <n-switch
+            :value="sceneStore.currentObjectData?.receiveShadow"
+            @update:value="(v:boolean) => sceneStore.updateSceneObjectData(sceneStore.selectedObjectId!, { receiveShadow: v } as any)"
+          />
+        </n-gi>
+      </n-grid>
+      <br />
+      <!-- 渲染顺序 -->
+      <n-grid x-gap="6" :cols="10">
+        <n-gi class="gid-item" :span="3">
+          渲染顺序
+        </n-gi>
+        <n-gi class="gid-item" :span="7">
+          <n-input-number
+            placeholder="从低到高"
+            :value="sceneStore.currentObjectData?.renderOrder"
+            :validator="(x: number) => x >= 0"
+            @update:value="(v:number) => sceneStore.updateSceneObjectData(sceneStore.selectedObjectId!, { renderOrder: v } as any)"
+          />
+        </n-gi>
+      </n-grid>
 
-    <n-grid x-gap="6" :cols="10">
-      <n-gi class="gid-item" :span="3">
-        选中
-      </n-gi>
-      <n-gi class="gid-item" :span="7">
-        <n-switch
-          :value="sceneStore.currentObjectData?.selectable ?? true"
-          @update:value="(v:boolean) => sceneStore.updateSceneObjectData(sceneStore.selectedObjectId!, { selectable: v } as any)"
-        />
-      </n-gi>
-    </n-grid>
-  </n-flex>
+      <n-grid x-gap="6" :cols="10">
+        <n-gi class="gid-item" :span="3">
+          选中
+        </n-gi>
+        <n-gi class="gid-item" :span="7">
+          <n-switch
+            :value="sceneStore.currentObjectData?.selectable ?? true"
+            @update:value="(v:boolean) => sceneStore.updateSceneObjectData(sceneStore.selectedObjectId!, { selectable: v } as any)"
+          />
+        </n-gi>
+      </n-grid>
+    </n-flex>
+  </n-scrollbar>
 </template>
 
 <style scoped>
+  .n-flex{
+    padding-bottom: 5vw;
+  }
   .gid-item {
     margin-block: auto;
     font-weight: bold;

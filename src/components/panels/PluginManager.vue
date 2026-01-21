@@ -123,6 +123,15 @@ function getDependencies(pluginId: string): string[] {
   const plugin = manager.getPlugin(pluginId)
   return plugin?.dependencies || []
 }
+
+// 切换插件选中状态（点击已选中的插件时收起详情）
+function togglePluginSelection(pluginId: string) {
+  if (selectedPluginId.value === pluginId) {
+    selectedPluginId.value = null // 收起详情
+  } else {
+    selectedPluginId.value = pluginId // 展开详情
+  }
+}
 </script>
 
 <template>
@@ -153,6 +162,7 @@ function getDependencies(pluginId: string): string[] {
       </n-input>
     </div>
 
+    
     <!-- 插件列表 -->
     <div class="plugin-list">
       <n-empty 
@@ -166,7 +176,7 @@ function getDependencies(pluginId: string): string[] {
         :key="plugin.id"
         class="plugin-item"
         :class="{ 'plugin-item-selected': selectedPluginId === plugin.id }"
-        @click="selectedPluginId = plugin.id"
+        @click="togglePluginSelection(plugin.id)"
       >
         <div class="plugin-item-header">
           <div class="plugin-info">
@@ -241,85 +251,86 @@ function getDependencies(pluginId: string): string[] {
         </div>
       </div>
     </div>
-
+    <n-scrollbar style="max-height: 100%;" content-style="padding-bottom: 15vw;overflow: hidden;">
     <!-- 插件详情面板 -->
     <n-divider v-if="selectedPlugin" style="margin: 16px 0;" />
     
-    <div v-if="selectedPlugin" class="plugin-details">
-      <h4 style="margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;">
-        <n-icon><InformationCircleOutline /></n-icon>
-        插件详情
-      </h4>
-      
-      <n-descriptions :column="1" size="small" bordered>
-        <n-descriptions-item label="插件ID">
-          <n-text code>{{ selectedPlugin.id }}</n-text>
-        </n-descriptions-item>
-        <n-descriptions-item label="名称">
-          {{ selectedPlugin.name }}
-        </n-descriptions-item>
-        <n-descriptions-item label="版本">
-          <n-tag type="info">{{ formatVersion(selectedPlugin.version) }}</n-tag>
-        </n-descriptions-item>
-        <n-descriptions-item v-if="selectedPlugin.description" label="描述">
-          {{ selectedPlugin.description }}
-        </n-descriptions-item>
-        <n-descriptions-item v-if="selectedPlugin.author" label="作者">
-          {{ selectedPlugin.author }}
-        </n-descriptions-item>
-        <n-descriptions-item v-if="hasDependencies(selectedPlugin.id)" label="依赖">
-          <n-space size="small">
-            <n-tag
-              v-for="depId in getDependencies(selectedPlugin.id)"
-              :key="depId"
-              size="small"
-              :type="manager.hasPlugin(depId) ? 'success' : 'error'"
-            >
-              <template #icon>
-                <n-icon>
-                  <CheckmarkCircleOutline v-if="manager.hasPlugin(depId)" />
-                  <CloseCircleOutline v-else />
-                </n-icon>
-              </template>
-              {{ depId }}
-            </n-tag>
-          </n-space>
-        </n-descriptions-item>
-      </n-descriptions>
+      <div v-if="selectedPlugin" class="plugin-details">
+        <h4 style="margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;">
+          <n-icon><InformationCircleOutline /></n-icon>
+          插件详情
+        </h4>
+        
+        <n-descriptions :column="1" size="small" bordered>
+          <n-descriptions-item label="插件ID">
+            <n-text code>{{ selectedPlugin.id }}</n-text>
+          </n-descriptions-item>
+          <n-descriptions-item label="名称">
+            {{ selectedPlugin.name }}
+          </n-descriptions-item>
+          <n-descriptions-item label="版本">
+            <n-tag type="info">{{ formatVersion(selectedPlugin.version) }}</n-tag>
+          </n-descriptions-item>
+          <n-descriptions-item v-if="selectedPlugin.description" label="描述">
+            {{ selectedPlugin.description }}
+          </n-descriptions-item>
+          <n-descriptions-item v-if="selectedPlugin.author" label="作者">
+            {{ selectedPlugin.author }}
+          </n-descriptions-item>
+          <n-descriptions-item v-if="hasDependencies(selectedPlugin.id)" label="依赖">
+            <n-space size="small">
+              <n-tag
+                v-for="depId in getDependencies(selectedPlugin.id)"
+                :key="depId"
+                size="small"
+                :type="manager.hasPlugin(depId) ? 'success' : 'error'"
+              >
+                <template #icon>
+                  <n-icon>
+                    <CheckmarkCircleOutline v-if="manager.hasPlugin(depId)" />
+                    <CloseCircleOutline v-else />
+                  </n-icon>
+                </template>
+                {{ depId }}
+              </n-tag>
+            </n-space>
+          </n-descriptions-item>
+        </n-descriptions>
 
-      <!-- 扩展详情 -->
-      <div class="extensions-detail" style="margin-top: 16px;">
-        <h5 style="margin: 0 0 8px 0;">注册的扩展</h5>
-        <n-space vertical size="small">
-          <div v-if="getPluginExtensions(selectedPlugin.id).objectTypes > 0" class="extension-group">
-            <n-text strong>对象类型:</n-text>
-            <n-text depth="3">{{ getPluginExtensions(selectedPlugin.id).objectTypes }} 个</n-text>
-          </div>
-          <div v-if="getPluginExtensions(selectedPlugin.id).panels > 0" class="extension-group">
-            <n-text strong>面板:</n-text>
-            <n-text depth="3">{{ getPluginExtensions(selectedPlugin.id).panels }} 个</n-text>
-          </div>
-          <div v-if="getPluginExtensions(selectedPlugin.id).menuItems > 0" class="extension-group">
-            <n-text strong>菜单项:</n-text>
-            <n-text depth="3">{{ getPluginExtensions(selectedPlugin.id).menuItems }} 个</n-text>
-          </div>
-          <div v-if="getPluginExtensions(selectedPlugin.id).shortcuts > 0" class="extension-group">
-            <n-text strong>快捷键:</n-text>
-            <n-text depth="3">{{ getPluginExtensions(selectedPlugin.id).shortcuts }} 个</n-text>
-          </div>
-          <div v-if="getPluginExtensions(selectedPlugin.id).toolbarItems > 0" class="extension-group">
-            <n-text strong>工具栏项:</n-text>
-            <n-text depth="3">{{ getPluginExtensions(selectedPlugin.id).toolbarItems }} 个</n-text>
-          </div>
-          <n-empty
-            v-if="Object.values(getPluginExtensions(selectedPlugin.id)).every(v => v === 0)"
-            description="此插件未注册任何扩展"
-            size="small"
-            style="margin: 8px 0;"
-          />
-        </n-space>
+        <!-- 扩展详情 -->
+        <div class="extensions-detail" style="margin-top: 16px;">
+          <h5 style="margin: 0 0 8px 0;">注册的扩展</h5>
+          <n-space vertical size="small">
+            <div v-if="getPluginExtensions(selectedPlugin.id).objectTypes > 0" class="extension-group">
+              <n-text strong>对象类型:</n-text>
+              <n-text depth="3">{{ getPluginExtensions(selectedPlugin.id).objectTypes }} 个</n-text>
+            </div>
+            <div v-if="getPluginExtensions(selectedPlugin.id).panels > 0" class="extension-group">
+              <n-text strong>面板:</n-text>
+              <n-text depth="3">{{ getPluginExtensions(selectedPlugin.id).panels }} 个</n-text>
+            </div>
+            <div v-if="getPluginExtensions(selectedPlugin.id).menuItems > 0" class="extension-group">
+              <n-text strong>菜单项:</n-text>
+              <n-text depth="3">{{ getPluginExtensions(selectedPlugin.id).menuItems }} 个</n-text>
+            </div>
+            <div v-if="getPluginExtensions(selectedPlugin.id).shortcuts > 0" class="extension-group">
+              <n-text strong>快捷键:</n-text>
+              <n-text depth="3">{{ getPluginExtensions(selectedPlugin.id).shortcuts }} 个</n-text>
+            </div>
+            <div v-if="getPluginExtensions(selectedPlugin.id).toolbarItems > 0" class="extension-group">
+              <n-text strong>工具栏项:</n-text>
+              <n-text depth="3">{{ getPluginExtensions(selectedPlugin.id).toolbarItems }} 个</n-text>
+            </div>
+            <n-empty
+              v-if="Object.values(getPluginExtensions(selectedPlugin.id)).every(v => v === 0)"
+              description="此插件未注册任何扩展"
+              size="small"
+              style="margin: 8px 0;"
+            />
+          </n-space>
+        </div>
       </div>
-    </div>
+    </n-scrollbar>
   </div>
 </template>
 
@@ -327,7 +338,7 @@ function getDependencies(pluginId: string): string[] {
 .plugin-manager-panel {
   padding: 16px;
   height: 100%;
-  overflow-y: auto;
+  /* overflow-y: auto; */
 }
 
 .panel-header {
@@ -350,6 +361,7 @@ function getDependencies(pluginId: string): string[] {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  margin-bottom: 0.5vw;
 }
 
 .plugin-item {

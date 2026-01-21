@@ -97,6 +97,17 @@ export const useSceneStore = defineStore('scene', () => {
   const transformMode = ref<'translate' | 'rotate' | 'scale'>('translate');
   const transformSpace = ref<'world' | 'local'>('world');
   
+  // 变换控制器步幅（snap）
+  const transformSnap = ref({
+    enabled: false,   // 是否启用步幅
+    translation: 0,   // 位移步幅（单位：米）
+    translationEnabled: false, // 位移步幅是否启用
+    rotation: 0,      // 旋转步幅（单位：弧度）
+    rotationEnabled: false,    // 旋转步幅是否启用
+    scale: 0,         // 缩放步幅（单位：倍数）
+    scaleEnabled: false        // 缩放步幅是否启用
+  });
+  
   // 场景是否加载完成（用于控制撤销/重做按钮的可用状态）
   const isSceneReady = ref(false);
   
@@ -1283,6 +1294,7 @@ export const useSceneStore = defineStore('scene', () => {
     
     transformMode,
     transformSpace,
+    transformSnap,
 
     notification,
     dialogProvider,

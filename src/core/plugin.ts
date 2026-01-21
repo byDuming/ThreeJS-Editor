@@ -8,8 +8,8 @@
  */
 
 import type { Component } from 'vue'
-import type { Object3D, Camera, Scene } from 'three'
-import type { WebGLRenderer } from 'three'
+import type { Object3D, Camera, Scene, WebGLRenderer } from 'three'
+import type { WebGPURenderer } from 'three/webgpu'
 import type { SceneObjectData } from '@/interfaces/sceneInterface'
 import type { useSceneStore } from '@/stores/modules/useScene.store'
 import type { useAnimationStore } from '@/stores/modules/useAnimation.store'
@@ -297,7 +297,7 @@ export interface EngineContext {
   three: {
     scene: Scene | null
     camera: Camera | null
-    renderer: WebGLRenderer | null
+    renderer: WebGLRenderer | WebGPURenderer | null
   }
   
   /** 注册函数 */

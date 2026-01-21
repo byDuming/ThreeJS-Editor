@@ -2,6 +2,7 @@
   import { computed } from 'vue'
   import { useSceneStore } from '@/stores/modules/useScene.store'
   import type { CameraSettings } from '@/interfaces/sceneInterface'
+  import NumberInput from './NumberInput.vue'
 
   const sceneStore = useSceneStore()
   const cameraSettings = computed(() => sceneStore.currentObjectData?.camera as CameraSettings | undefined)
@@ -23,30 +24,39 @@
       <n-grid x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">视角</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number
+          <NumberInput
             :value="cameraSettings?.fov ?? 50"
-            placeholder="FOV"
-            @update:value="(v:number) => updateCameraSettings({ fov: v })"
+            @update:value="(v:number | null) => updateCameraSettings({ fov: v ?? 50 })"
+            :step="0.1"
+            :min="1"
+            :max="180"
+            :precision="2"
           />
         </n-gi>
       </n-grid>
       <n-grid x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">近裁剪</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number
+          <NumberInput
             :value="cameraSettings?.near ?? 0.01"
-            placeholder="near"
-            @update:value="(v:number) => updateCameraSettings({ near: v })"
+            @update:value="(v:number | null) => updateCameraSettings({ near: v ?? 0.01 })"
+            :step="0.01"
+            :min="0.001"
+            :max="100"
+            :precision="3"
           />
         </n-gi>
       </n-grid>
       <n-grid x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">远裁剪</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number
+          <NumberInput
             :value="cameraSettings?.far ?? 2000"
-            placeholder="far"
-            @update:value="(v:number) => updateCameraSettings({ far: v })"
+            @update:value="(v:number | null) => updateCameraSettings({ far: v ?? 2000 })"
+            :step="1"
+            :min="1"
+            :max="100000"
+            :precision="0"
           />
         </n-gi>
       </n-grid>

@@ -1,12 +1,20 @@
 <script setup lang="ts">
   import { computed } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
+  import { useSceneStore } from '@/stores/modules/useScene.store'
+  import { Move, Resize , Magnet } from '@vicons/ionicons5'
+  import { Md3DRotationFilled } from '@vicons/material'
   // 场景视图
   import Scene from '@/components/Scene.vue'
   // 左侧编辑面板
   import LeftEditPanel from '@/components/LeftEditPanel.vue'
   // 底部资产面板
   import BottomAssetPanel from '@/components/BottomAssetPanel.vue'
+  // 数值输入控件
+  import NumberInput from '@/components/panels/NumberInput.vue'
+  import DialogOverlayHost from '@/dialog/DialogOverlayHost.vue'
+  
+  const sceneStore = useSceneStore()
 
   const route = useRoute()
   const router = useRouter()
@@ -61,6 +69,7 @@
     <div class="main-area">
       <div class="scene-area">
         <Scene :scene-id="sceneId" :mode="currentMode" />
+        <DialogOverlayHost />
       </div>
       <!-- 底部资产面板 - 仅编辑模式显示 -->
       <BottomAssetPanel v-show="isEditMode" />
@@ -69,6 +78,126 @@
     <!-- 右侧编辑面板 - 仅编辑模式显示 -->
     <div v-show="isEditMode" class="edit-panel-area">
       <LeftEditPanel />
+    </div>
+
+    <!-- 顶部步幅控制 - 仅编辑模式显示 -->
+    <div v-show="isEditMode" class="top-snap-controls">
+      <!-- 磁铁图标 - 总体启用/禁用 -->
+      <n-tooltip trigger="hover" placement="bottom">
+        <template #trigger>
+          <n-button
+            quaternary
+            size="small"
+            :type="sceneStore.transformSnap.enabled ? 'primary' : 'default'"
+            @click="sceneStore.transformSnap.enabled = !sceneStore.transformSnap.enabled"
+            class="magnet-button"
+            :class="{ active: sceneStore.transformSnap.enabled }"
+          >
+            <template #icon>
+              <n-icon><Magnet /></n-icon>
+            </template>
+          </n-button>
+        </template>
+        步幅吸附 (Shift+Tab)
+      </n-tooltip>
+      
+      <n-divider vertical style="margin: 0 4px" />
+      
+      <!-- 位移步幅 -->
+      <div class="snap-item">
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <n-button
+              quaternary
+              size="tiny"
+              :type="sceneStore.transformSnap.translationEnabled && sceneStore.transformSnap.enabled ? 'primary' : 'default'"
+              @click="sceneStore.transformSnap.translationEnabled = !sceneStore.transformSnap.translationEnabled"
+              :disabled="!sceneStore.transformSnap.enabled"
+              class="snap-toggle"
+            >
+              <template #icon>
+                <n-icon><Move /></n-icon>
+              </template>
+            </n-button>
+          </template>
+          位移步幅
+        </n-tooltip>
+        <NumberInput
+          :value="sceneStore.transformSnap.translation"
+          :min="0"
+          :max="100"
+          :step="0.1"
+          :precision="2"
+          :disabled="!sceneStore.transformSnap.enabled || !sceneStore.transformSnap.translationEnabled"
+          placeholder="0.0"
+          class="snap-input"
+          @update:value="sceneStore.transformSnap.translation = $event ?? 0"
+        />
+      </div>
+      
+      <!-- 旋转步幅 -->
+      <div class="snap-item">
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <n-button
+              quaternary
+              size="tiny"
+              :type="sceneStore.transformSnap.rotationEnabled && sceneStore.transformSnap.enabled ? 'primary' : 'default'"
+              @click="sceneStore.transformSnap.rotationEnabled = !sceneStore.transformSnap.rotationEnabled"
+              :disabled="!sceneStore.transformSnap.enabled"
+              class="snap-toggle"
+            >
+              <template #icon>
+                <n-icon><Md3DRotationFilled /></n-icon>
+              </template>
+            </n-button>
+          </template>
+          旋转步幅
+        </n-tooltip>
+        <NumberInput
+          :value="sceneStore.transformSnap.rotation"
+          :min="0"
+          :max="Math.PI * 2"
+          :step="Math.PI / 180"
+          :precision="3"
+          :disabled="!sceneStore.transformSnap.enabled || !sceneStore.transformSnap.rotationEnabled"
+          placeholder="0.0"
+          class="snap-input"
+          @update:value="sceneStore.transformSnap.rotation = $event ?? 0"
+        />
+      </div>
+      
+      <!-- 缩放步幅 -->
+      <div class="snap-item">
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <n-button
+              quaternary
+              size="tiny"
+              :type="sceneStore.transformSnap.scaleEnabled && sceneStore.transformSnap.enabled ? 'primary' : 'default'"
+              @click="sceneStore.transformSnap.scaleEnabled = !sceneStore.transformSnap.scaleEnabled"
+              :disabled="!sceneStore.transformSnap.enabled"
+              class="snap-toggle"
+            >
+              <template #icon>
+                <n-icon><Resize /></n-icon>
+              </template>
+            </n-button>
+          </template>
+          缩放步幅
+        </n-tooltip>
+        <NumberInput
+          :value="sceneStore.transformSnap.scale"
+          :min="0"
+          :max="10"
+          :step="0.1"
+          :precision="2"
+          :disabled="!sceneStore.transformSnap.enabled || !sceneStore.transformSnap.scaleEnabled"
+          placeholder="0.0"
+          class="snap-input"
+          @update:value="sceneStore.transformSnap.scale = $event ?? 0"
+        />
+      </div>
     </div>
 
     <!-- 悬浮工具栏 - 始终显示 -->
@@ -120,16 +249,93 @@
 .scene-area {
   flex: 1;
   overflow: hidden;
+  position: relative;
 }
 
 /* 右侧编辑面板区域 */
 .edit-panel-area {
-  width: 14%;
-  min-width: 280px;
-  max-width: 400px;
+  width: 18%;
   height: 100%;
   overflow: hidden;
   border-left: 1px solid var(--n-border-color, #e0e0e0);
+}
+
+/* 顶部步幅控制 */
+.top-snap-controls {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  background: var(--n-color, rgba(255, 255, 255, 0.95));
+  border: 1px solid var(--n-border-color, rgba(0, 0, 0, 0.12));
+  padding: 4px 8px;
+  border-radius: 6px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.magnet-button {
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.magnet-button.active {
+  background-color: var(--n-primary-color, #18a058);
+  color: #fff;
+}
+
+.magnet-button.active:hover {
+  background-color: var(--n-primary-color-hover, #36ad6a);
+}
+
+.magnet-button.active:active {
+  background-color: var(--n-primary-color-pressed, #0c7a43);
+}
+
+.snap-item {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.snap-item:hover {
+  background-color: var(--n-hover-color, rgba(0, 0, 0, 0.06));
+}
+
+.snap-toggle {
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.snap-input {
+  min-width: 60px;
+  flex: 0 0 auto;
+}
+
+.snap-input :deep(.number-input-content) {
+  height: 22px;
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+.snap-input :deep(.number-input-display) {
+  font-size: 11px;
+  text-align: center;
 }
 
 /* 悬浮工具栏 */

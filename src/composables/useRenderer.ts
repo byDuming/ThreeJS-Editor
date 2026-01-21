@@ -1,5 +1,5 @@
 import { ref, shallowRef, onBeforeUnmount, watch } from 'vue'
-import { Scene, PerspectiveCamera, Color, type ToneMapping } from 'three'
+import { Scene, PerspectiveCamera, Color, Clock, type ToneMapping } from 'three'
 import { WebGPURenderer } from 'three/webgpu'
 import {
   WebGLRenderer,
@@ -20,6 +20,7 @@ import { useSceneStore } from '@/stores/modules/useScene.store.ts'
 import { MapControls } from 'three/addons/controls/MapControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { useUiEditorStore } from '@/stores/modules/uiEditor.store.ts'
+import { pluginManager } from '@/core'
 
 /**
  * 渲染器与交互控制逻辑（纯三维层，不关心 UI）：
@@ -46,6 +47,7 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
   let keyboardListenerAdded = false
   let isInitialized = false
   let resizeObserver: ResizeObserver | null = null
+  const clock = new Clock()
 
   // ==================== 相机管理 ====================
 
@@ -162,9 +164,22 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
     // 设置模式和空间
     transformControls.value.setMode(sceneStore.transformMode)
     transformControls.value.setSpace(sceneStore.transformSpace)
+    
+    // 设置步幅
+    updateTransformSnap()
 
     // 附加到选中的对象
     attachTransformControl(sceneStore.selectedObjectId)
+  }
+  
+  // 更新变换控制器步幅
+  function updateTransformSnap() {
+    if (!transformControls.value) return
+    const snap = sceneStore.transformSnap
+    // 只有当总体启用且对应的变换类型启用时，才应用步幅
+    transformControls.value.translationSnap = (snap.enabled && snap.translationEnabled && snap.translation > 0) ? snap.translation : null
+    transformControls.value.rotationSnap = (snap.enabled && snap.rotationEnabled && snap.rotation > 0) ? snap.rotation : null
+    transformControls.value.scaleSnap = (snap.enabled && snap.scaleEnabled && snap.scale > 0) ? snap.scale : null
   }
 
   function updateControlsCamera() {
@@ -197,11 +212,22 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
       return
     }
     sceneStore.renderer.setAnimationLoop(() => {
+      // delta（秒）
+      const delta = clock.getDelta()
+      // 同步 context.three 引用（相机/场景可能在切场景时变化）
+      const ctx = pluginManager.getContext?.() ?? null
+      if (ctx) {
+        ctx.three.scene = sceneStore.threeScene
+        ctx.three.camera = camera.value
+        ctx.three.renderer = sceneStore.renderer as any
+      }
+      if (ctx) pluginManager.callHook('onBeforeRender', delta, ctx as any)
       controls.value?.update()
       if (transformControls.value?.object && !isInSceneGraph(transformControls.value.object)) {
         transformControls.value.detach()
       }
       sceneStore.renderer!.render(sceneStore.threeScene!, camera.value!)
+      if (ctx) pluginManager.callHook('onAfterRender', delta, ctx as any)
       processScreenshot()
     })
   }
@@ -715,6 +741,10 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
   watch(() => sceneStore.transformSpace, (space) => {
     transformControls.value?.setSpace(space)
   })
+
+  watch(() => sceneStore.transformSnap, () => {
+    updateTransformSnap()
+  }, { deep: true })
 
   watch(() => sceneStore.rendererSettings, () => {
     applyRendererSettings()

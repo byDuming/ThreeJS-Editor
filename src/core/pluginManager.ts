@@ -8,8 +8,8 @@
  */
 
 import { ref, computed } from 'vue'
-import type { Camera, Scene } from 'three'
-import type { WebGLRenderer } from 'three'
+import type { Camera, Scene, WebGLRenderer } from 'three'
+import type { WebGPURenderer } from 'three/webgpu'
 import type {
   EnginePlugin,
   EngineContext,
@@ -83,7 +83,7 @@ export class PluginManager {
    */
   createContext(
     stores: EngineContext['stores'],
-    three: { scene: Scene | null; camera: Camera | null; renderer: WebGLRenderer | null }
+    three: { scene: Scene | null; camera: Camera | null; renderer: WebGLRenderer | WebGPURenderer | null }
   ): EngineContext {
     const self = this
     
@@ -459,7 +459,7 @@ export class PluginManager {
   }
 
   // ==================== 生命周期钩子调用 ====================
-  
+
   /**
    * 调用所有插件的指定钩子
    */
@@ -473,7 +473,7 @@ export class PluginManager {
       const hook = plugin.hooks?.[hookName]
       if (hook) {
         try {
-          (hook as Function)(...args, this.context)
+          ;(hook as Function)(...args)
         } catch (error) {
           console.error(`[PluginManager] Hook ${hookName} error in plugin ${plugin.id}:`, error)
         }
@@ -568,11 +568,29 @@ export function usePluginManager() {
   return {
     manager: pluginManager,
     version: computed(() => pluginManager.version),
-    plugins: computed(() => pluginManager.getPlugins()),
-    objectTypes: computed(() => pluginManager.getAllObjectTypes()),
-    panels: computed(() => pluginManager.getAllPanels()),
-    menuItems: computed(() => pluginManager.getAllMenuItems()),
-    shortcuts: computed(() => pluginManager.getAllShortcuts()),
-    toolbarItems: computed(() => pluginManager.getAllToolbarItems())
+    plugins: computed(() => {
+      void pluginManager.version
+      return pluginManager.getPlugins()
+    }),
+    objectTypes: computed(() => {
+      void pluginManager.version
+      return pluginManager.getAllObjectTypes()
+    }),
+    panels: computed(() => {
+      void pluginManager.version
+      return pluginManager.getAllPanels()
+    }),
+    menuItems: computed(() => {
+      void pluginManager.version
+      return pluginManager.getAllMenuItems()
+    }),
+    shortcuts: computed(() => {
+      void pluginManager.version
+      return pluginManager.getAllShortcuts()
+    }),
+    toolbarItems: computed(() => {
+      void pluginManager.version
+      return pluginManager.getAllToolbarItems()
+    })
   }
 }

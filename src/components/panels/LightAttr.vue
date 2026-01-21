@@ -1,8 +1,12 @@
 <script setup lang="ts">
   import { computed } from 'vue'
   import { useSceneStore } from '@/stores/modules/useScene.store'
+  import NumberInput from './NumberInput.vue'
 
   const sceneStore = useSceneStore()
+  
+  // 常量
+  const PI_HALF = Math.PI / 2
 
   const lightData = computed(() => sceneStore.currentObjectData?.userData ?? {})
   const lightType = computed(() => (lightData.value as any)?.lightType ?? '')
@@ -154,9 +158,13 @@
     <n-grid x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">强度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number
+        <NumberInput
           :value="lightData?.intensity ?? 1"
-          @update:value="(v:number) => updateLight({ intensity: v })"
+          @update:value="(v:number | null) => updateLight({ intensity: v ?? 1 })"
+          :step="0.01"
+          :min="0"
+          :max="10"
+          :precision="3"
         />
       </n-gi>
     </n-grid>
@@ -164,18 +172,26 @@
     <n-grid v-if="lightType === 'pointLight' || lightType === 'spotLight'" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">距离</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number
+        <NumberInput
           :value="lightData?.distance ?? 0"
-          @update:value="(v:number) => updateLight({ distance: v })"
+          @update:value="(v:number | null) => updateLight({ distance: v ?? 0 })"
+          :step="0.1"
+          :min="0"
+          :max="10000"
+          :precision="2"
         />
       </n-gi>
     </n-grid>
     <n-grid v-if="lightType === 'pointLight' || lightType === 'spotLight'" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">衰减</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number
+        <NumberInput
           :value="lightData?.decay ?? 2"
-          @update:value="(v:number) => updateLight({ decay: v })"
+          @update:value="(v:number | null) => updateLight({ decay: v ?? 2 })"
+          :step="0.01"
+          :min="0"
+          :max="10"
+          :precision="3"
         />
       </n-gi>
     </n-grid>
@@ -183,18 +199,26 @@
     <n-grid v-if="lightType === 'spotLight'" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">角度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number
+        <NumberInput
           :value="lightData?.angle ?? 1"
-          @update:value="(v:number) => updateLight({ angle: v })"
+          @update:value="(v:number | null) => updateLight({ angle: v ?? 1 })"
+          :step="0.01"
+          :min="0"
+          :max="PI_HALF"
+          :precision="3"
         />
       </n-gi>
     </n-grid>
     <n-grid v-if="lightType === 'spotLight'" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">半影</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number
+        <NumberInput
           :value="lightData?.penumbra ?? 0"
-          @update:value="(v:number) => updateLight({ penumbra: v })"
+          @update:value="(v:number | null) => updateLight({ penumbra: v ?? 0 })"
+          :step="0.01"
+          :min="0"
+          :max="1"
+          :precision="3"
         />
       </n-gi>
     </n-grid>
@@ -202,18 +226,26 @@
     <n-grid v-if="lightType === 'rectAreaLight'" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">宽度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number
+        <NumberInput
           :value="lightData?.width ?? 10"
-          @update:value="(v:number) => updateLight({ width: v })"
+          @update:value="(v:number | null) => updateLight({ width: v ?? 10 })"
+          :step="0.1"
+          :min="0.1"
+          :max="1000"
+          :precision="3"
         />
       </n-gi>
     </n-grid>
     <n-grid v-if="lightType === 'rectAreaLight'" x-gap="6" :cols="10">
       <n-gi class="gid-item" :span="3">高度</n-gi>
       <n-gi class="gid-item" :span="7">
-        <n-input-number
+        <NumberInput
           :value="lightData?.height ?? 10"
-          @update:value="(v:number) => updateLight({ height: v })"
+          @update:value="(v:number | null) => updateLight({ height: v ?? 10 })"
+          :step="0.1"
+          :min="0.1"
+          :max="1000"
+          :precision="3"
         />
       </n-gi>
     </n-grid>
@@ -222,36 +254,52 @@
       <n-grid x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">阴影宽度</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number
+          <NumberInput
             :value="getShadowSize('width')"
-            @update:value="(v:number) => updateLightShadowSize('width', v)"
+            @update:value="(v:number | null) => updateLightShadowSize('width', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="10000"
+            :precision="2"
           />
         </n-gi>
       </n-grid>
       <n-grid x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">阴影高度</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number
+          <NumberInput
             :value="getShadowSize('height')"
-            @update:value="(v:number) => updateLightShadowSize('height', v)"
+            @update:value="(v:number | null) => updateLightShadowSize('height', v)"
+            :step="0.1"
+            :min="0.1"
+            :max="10000"
+            :precision="2"
           />
         </n-gi>
       </n-grid>
       <n-grid x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">阴影近裁剪</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number
+          <NumberInput
             :value="lightData?.shadow?.camera?.near ?? 0.5"
-            @update:value="(v:number) => updateLightShadowCamera('near', v)"
+            @update:value="(v:number | null) => updateLightShadowCamera('near', v)"
+            :step="0.01"
+            :min="0.01"
+            :max="100"
+            :precision="3"
           />
         </n-gi>
       </n-grid>
       <n-grid x-gap="6" :cols="10">
         <n-gi class="gid-item" :span="3">阴影远裁剪</n-gi>
         <n-gi class="gid-item" :span="7">
-          <n-input-number
+          <NumberInput
             :value="lightData?.shadow?.camera?.far ?? 200"
-            @update:value="(v:number) => updateLightShadowCamera('far', v)"
+            @update:value="(v:number | null) => updateLightShadowCamera('far', v)"
+            :step="1"
+            :min="1"
+            :max="100000"
+            :precision="0"
           />
         </n-gi>
       </n-grid>
