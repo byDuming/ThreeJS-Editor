@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { nextTick, ref } from 'vue'
 
-export type AssetCategory = 'model' | 'texture' | 'material' | 'hdri'
+export type AssetCategory = 'model' | 'pointCloud' | 'texture' | 'material' | 'hdri'
 export type BottomPanelMode = 'assets' | 'timeline'
 
 export const useUiEditorStore = defineStore('uiEditor', () => {

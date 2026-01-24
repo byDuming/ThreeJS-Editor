@@ -3,7 +3,6 @@
  * 
  * 职责：
  * - 资产列表管理（纹理、模型、HDR等）
- * - 本地文件缓存
  * - 资产上传和解析
  * - 模型加载状态跟踪
  */
@@ -19,9 +18,6 @@ export const useSceneAssetStore = defineStore('sceneAsset', () => {
   
   /** 资产引用列表 */
   const assets = ref<AssetRef[]>([])
-  
-  /** 本地文件缓存 (id -> File) */
-  const assetFiles = shallowRef(new Map<string, File>())
   
   /** 正在加载的资产ID集合 */
   const loadingAssets = ref(new Set<string>())
@@ -58,31 +54,7 @@ export const useSceneAssetStore = defineStore('sceneAsset', () => {
     return loadedAssets.value.has(id)
   }
 
-  // ==================== 本地资产操作 ====================
-  
-  /**
-   * 注册本地资产（从文件）
-   */
-  function registerLocalAsset(file: File, type: AssetRef['type']): AssetRef {
-    const id = `asset-${Date.now()}-${Math.random().toString(16).slice(2)}`
-    const ext = file.name.split('.').pop()?.toLowerCase()
-    const asset: AssetRef = {
-      id,
-      type,
-      uri: `local://${id}`,
-      name: file.name,
-      source: 'local',
-      meta: {
-        ext,
-        size: file.size,
-        mime: file.type
-      },
-      createdAt: Date.now()
-    }
-    assets.value.push(asset)
-    assetFiles.value.set(id, file)
-    return asset
-  }
+  // ==================== 云端资产操作 ====================
   
   /**
    * 注册云端资产（从 assetApi 上传后返回的资产）
@@ -97,8 +69,6 @@ export const useSceneAssetStore = defineStore('sceneAsset', () => {
     return asset
   }
 
-  // ==================== 云端资产操作 ====================
-  
   /**
    * 上传资产到云端存储（全局共享）
    * @param file 文件对象
@@ -118,15 +88,10 @@ export const useSceneAssetStore = defineStore('sceneAsset', () => {
   // ==================== URI 解析 ====================
   
   /**
-   * 解析资产URI（处理本地文件和远程URL）
+   * 解析资产 URI（远程 URL）
    */
   async function resolveAssetUri(asset: AssetRef): Promise<{ url: string; revoke?: () => void } | null> {
-    if (asset.uri.startsWith('local://')) {
-      const file = assetFiles.value.get(asset.id)
-      if (!file) return null
-      const url = URL.createObjectURL(file)
-      return { url, revoke: () => URL.revokeObjectURL(url) }
-    }
+    if (!asset?.uri) return null
     return { url: asset.uri }
   }
 
@@ -207,18 +172,6 @@ export const useSceneAssetStore = defineStore('sceneAsset', () => {
     const asset = assets.value[index]
     if (!asset) return false
     
-    // 撤销 Blob URL
-    if (asset.uri.startsWith('blob:')) {
-      URL.revokeObjectURL(asset.uri)
-    }
-    
-    // 移除文件缓存
-    if (assetFiles.value.has(id)) {
-      const newFiles = new Map(assetFiles.value)
-      newFiles.delete(id)
-      assetFiles.value = newFiles
-    }
-    
     // 移除加载状态
     loadingAssets.value.delete(id)
     loadedAssets.value.delete(id)
@@ -234,15 +187,7 @@ export const useSceneAssetStore = defineStore('sceneAsset', () => {
    * 清空所有资产
    */
   function clearAssets() {
-    // 撤销所有 Blob URL
-    for (const asset of assets.value) {
-      if (asset.uri.startsWith('blob:')) {
-        URL.revokeObjectURL(asset.uri)
-      }
-    }
-    
     assets.value = []
-    assetFiles.value = new Map()
     loadingAssets.value.clear()
     loadedAssets.value.clear()
     assetLoadPromises.value = new Map()
@@ -251,10 +196,14 @@ export const useSceneAssetStore = defineStore('sceneAsset', () => {
   
   /**
    * 设置资产列表（用于加载场景）
+   * 只保留云端资产（含 legacy source='remote' 的兼容），过滤 local 等无效数据
    */
   function setAssets(newAssets: AssetRef[]) {
     clearAssets()
-    assets.value = newAssets
+    const safe = (newAssets || []).filter(a =>
+      (a.source === 'cloud' || (a as { source?: string }).source === 'remote') && !a.uri?.startsWith('local://')
+    )
+    assets.value = safe
   }
 
   // ==================== 返回 ====================
@@ -262,7 +211,6 @@ export const useSceneAssetStore = defineStore('sceneAsset', () => {
   return {
     // 数据
     assets,
-    assetFiles,
     loadingAssets,
     loadedAssets,
     assetLoadPromises,
@@ -273,8 +221,6 @@ export const useSceneAssetStore = defineStore('sceneAsset', () => {
     isAssetLoading,
     isAssetLoaded,
     
-    // 本地资产操作
-    registerLocalAsset,
     registerRemoteAsset,
     resolveAssetUri,
     

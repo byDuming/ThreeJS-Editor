@@ -1051,6 +1051,7 @@ export function createThreeObject(data: SceneObjectData, opts?: { objectsMap?: M
   switch (data.type) {
     case 'group':
     case 'model':
+    case 'pointCloud':
       obj = new Group()
       break
     case 'mesh': {

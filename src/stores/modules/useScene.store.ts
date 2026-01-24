@@ -22,7 +22,7 @@ import { createSceneObjectData, type SceneObjectInput } from '@/utils/sceneFacto
 import { applyCameraSettings, applyLightSettings, applySceneSettings, applyTransform, createThreeObject, syncThreeObjectState, updateMeshGeometry, updateMeshMaterial, ensureUV2ForModel, applyShadowRecursively } from '@/utils/threeObjectFactory.ts'
 import { NIcon, type TreeOption } from 'naive-ui'
 import { Cube, LogoDropbox, CubeOutline, Camera } from '@vicons/ionicons5'
-import { LightbulbFilled, MovieCreationFilled } from '@vicons/material'
+import { LightbulbFilled, MovieCreationFilled, CloudCircleFilled } from '@vicons/material'
 import { Cubes } from '@vicons/fa'
 import type { NotificationApiInjection } from 'naive-ui/es/notification/src/NotificationProvider'
 import type { DialogApiInjection } from 'naive-ui/es/dialog/src/DialogProvider'
@@ -90,14 +90,9 @@ export const useSceneStore = defineStore('scene', () => {
     get: () => assetStore.assets,
     set: (val) => assetStore.setAssets(val)
   })
-  const assetFiles = computed(() => assetStore.assetFiles)
   
   function getAssetById(id: string) {
     return assetStore.getAssetById(id)
-  }
-  
-  function registerLocalAsset(file: File, type: AssetRef['type']): AssetRef {
-    return assetStore.registerLocalAsset(file, type)
   }
   
   function registerRemoteAsset(asset: AssetRef): AssetRef {
@@ -262,7 +257,7 @@ export const useSceneStore = defineStore('scene', () => {
       try {
         resolved = await resolveAssetUri(asset)
         if (!resolved) {
-          console.warn('Model asset is missing local file:', asset.name)
+          console.warn('Model asset has no valid URI:', asset.name)
           return
         }
         const loader = new GLTFLoader()
@@ -294,16 +289,74 @@ export const useSceneStore = defineStore('scene', () => {
     await loadPromise
   }
 
-  async function importModelFile(file: File, parentId: string) {
-    const asset = registerLocalAsset(file, 'model')
-    const created = addSceneObjectData({
-      type: 'model',
-      name: asset.name,
-      parentId,
-      assetId: asset.id
-    })
-    await loadModelAssetIntoObject(asset.id, created.id)
-    selectedObjectId.value = created.id
+  // ==================== 点云加载 ====================
+
+  async function loadPointCloudAssetIntoObject(assetId: string, objectId: string): Promise<void> {
+    const asset = getAssetById(assetId)
+    if (!asset) {
+      console.warn(`[loadPointCloudAssetIntoObject] 找不到资产: ${assetId}`)
+      return
+    }
+
+    const target = objectsMap.value.get(objectId)
+    if (!target) {
+      console.warn(`[loadPointCloudAssetIntoObject] 找不到目标对象: ${objectId}`)
+      return
+    }
+
+    // 如果资产已经在加载中，等待加载完成
+    const existingPromise = assetStore.getAssetLoadPromise(assetId)
+    if (existingPromise) {
+      await existingPromise
+      const cached = assetStore.getCachedAssetScene(assetId)
+      if (cached) {
+        target.children.slice().forEach(child => target.remove(child))
+        target.add(cached.clone(true))
+      }
+      return
+    }
+
+    // 如果资产已经加载完成，从缓存中克隆
+    if (assetStore.isAssetLoaded(assetId)) {
+      const cached = assetStore.getCachedAssetScene(assetId)
+      if (cached) {
+        target.children.slice().forEach(child => target.remove(child))
+        target.add(cached.clone(true))
+      }
+      return
+    }
+
+    // 创建加载 Promise
+    const loadPromise = (async () => {
+      assetStore.markAssetLoading(assetId)
+      let resolved: { url: string; revoke?: () => void } | null = null
+      try {
+        resolved = await resolveAssetUri(asset)
+        if (!resolved) {
+          console.warn('Point cloud asset has no valid URI:', asset.name)
+          return
+        }
+        const { PCDLoader } = await import('three/addons/loaders/PCDLoader.js')
+        const loader = new PCDLoader()
+        const points = await loader.loadAsync(resolved.url)
+
+        assetStore.cacheAssetScene(assetId, points)
+        target.children.slice().forEach(child => target.remove(child))
+        target.add(points.clone(true))
+
+        assetStore.markAssetLoaded(assetId)
+        console.log(`[loadPointCloudAssetIntoObject] 点云加载完成: ${asset.name} (${assetId})`)
+      } catch (error) {
+        console.error(`[loadPointCloudAssetIntoObject] 加载点云失败: ${asset.name} (${assetId})`, error)
+        assetStore.markAssetFailed(assetId)
+        throw error
+      } finally {
+        resolved?.revoke?.()
+      }
+    })()
+
+    assetStore.setAssetLoadPromise(assetId, loadPromise)
+    await loadPromise
   }
 
   // ==================== 场景初始化 ====================
@@ -352,6 +405,7 @@ export const useSceneStore = defineStore('scene', () => {
     light: LightbulbFilled,
     camera: Camera,
     model: Cubes,
+    pointCloud: CloudCircleFilled,
     scene: MovieCreationFilled
   }
 
@@ -471,6 +525,10 @@ export const useSceneStore = defineStore('scene', () => {
         const loadPromise = loadModelAssetIntoObject(data.assetId, data.id)
         modelLoadPromises.push(loadPromise)
       }
+      if (data.type === 'pointCloud' && data.assetId) {
+        const loadPromise = loadPointCloudAssetIntoObject(data.assetId, data.id)
+        modelLoadPromises.push(loadPromise)
+      }
     })
 
     objectsMap.value.forEach((obj, id) => {
@@ -560,6 +618,9 @@ export const useSceneStore = defineStore('scene', () => {
       
       if (newObj.type === 'model' && newObj.assetId) {
         void loadModelAssetIntoObject(newObj.assetId, id)
+      }
+      if (newObj.type === 'pointCloud' && newObj.assetId) {
+        void loadPointCloudAssetIntoObject(newObj.assetId, id)
       }
     }
 
@@ -761,6 +822,9 @@ export const useSceneStore = defineStore('scene', () => {
     }
     if (nextData.type === 'model' && (assetChanged || typeChanged) && nextData.assetId) {
       void loadModelAssetIntoObject(nextData.assetId, id)
+    }
+    if (nextData.type === 'pointCloud' && (assetChanged || typeChanged) && nextData.assetId) {
+      void loadPointCloudAssetIntoObject(nextData.assetId, id)
     }
 
     if (!options?.skipHistory) {
@@ -996,7 +1060,6 @@ export const useSceneStore = defineStore('scene', () => {
     addSceneObjectData,
     updateSceneObjectData,
     removeSceneObjectData,
-    importModelFile,
     
     // 场景树
     getObjectTree,
@@ -1015,8 +1078,6 @@ export const useSceneStore = defineStore('scene', () => {
     
     // 资产管理（代理）
     assets,
-    assetFiles,
-    registerLocalAsset,
     registerRemoteAsset,
     uploadAsset,
     getAssetById,

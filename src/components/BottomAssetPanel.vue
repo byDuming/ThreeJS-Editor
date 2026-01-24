@@ -6,7 +6,6 @@
   import { useMessage, useDialog, type UploadFileInfo } from 'naive-ui'
   import {
     CloudUploadOutline,
-    AddOutline,
     ChevronDownOutline,
     ChevronUpOutline,
     CubeOutline,
@@ -17,14 +16,14 @@
     FolderOutline,
     FolderOpenOutline
   } from '@vicons/ionicons5'
-  import { DeleteFilled } from '@vicons/material'
+  import { DeleteFilled, CloudCircleFilled } from '@vicons/material'
   import type { AssetRef } from '@/types/asset'
   // 时间轴组件
   import { Timeline } from '@/components/timeline'
-// 贴图压缩包解析
-import { parseTexturePack, getTextureSlotLabel, type TexturePackResult } from '@/utils/texturePackLoader'
-// UV2 处理
-import { ensureUV2ForModel } from '@/utils/threeObjectFactory'
+  // 贴图压缩包解析
+  import { parseTexturePack, getTextureSlotLabel, type TexturePackResult } from '@/utils/texturePackLoader'
+  // UV2 处理
+  import { ensureUV2ForModel } from '@/utils/threeObjectFactory'
 
   const sceneStore = useSceneStore()
   const uiEditorStore = useUiEditorStore()
@@ -48,6 +47,7 @@ import { ensureUV2ForModel } from '@/utils/threeObjectFactory'
   // 资产类别配置
   const categories: Array<{ key: AssetCategory; label: string; icon: any; accept: string; description: string }> = [
     { key: 'model', label: '模型', icon: CubeOutline, accept: '.glb,.gltf', description: '3D模型文件 (.glb, .gltf)' },
+    { key: 'pointCloud', label: '点云', icon: CloudCircleFilled, accept: '.pcd', description: '点云文件 (.pcd)' },
     { key: 'texture', label: '贴图', icon: ImagesOutline, accept: '.png,.jpg,.jpeg,.webp', description: '图片贴图 (.png, .jpg, .webp)' },
     { key: 'material', label: '材质', icon: ColorPaletteOutline, accept: '.json', description: '材质预设 (.json)' },
     { key: 'hdri', label: 'HDRI', icon: SunnyOutline, accept: '.hdr,.exr', description: '环境贴图 (.hdr, .exr)' }
@@ -77,10 +77,11 @@ import { ensureUV2ForModel } from '@/utils/threeObjectFactory'
   const filteredAssets = computed(() => {
     const category = uiEditorStore.activeAssetCategory
     return globalAssets.value.filter(a => {
-      if (category === 'model') return a.type === 'model' && a.source === 'remote'
-      if (category === 'texture') return a.type === 'texture' && a.source === 'remote'
+      if (category === 'model') return a.type === 'model' && (a.source === 'cloud' || (a as { source?: string }).source === 'remote')
+      if (category === 'texture') return a.type === 'texture' && (a.source === 'cloud' || (a as { source?: string }).source === 'remote')
       if (category === 'material') return a.type === 'material'
       if (category === 'hdri') return a.type === 'hdri'
+      if (category === 'pointCloud') return a.type === 'pointCloud' && (a.source === 'cloud' || (a as { source?: string }).source === 'remote')
       return false
     })
   })
@@ -170,10 +171,38 @@ import { ensureUV2ForModel } from '@/utils/threeObjectFactory'
     }
   }
 
+  // 导入点云到场景
+  async function handleImportPointCloud(asset: AssetRef) {
+    if (!sceneStore.threeScene) {
+      message.warning('场景未初始化，请稍候再试')
+      return
+    }
+    try {
+      loading.value = true
+      sceneStore.registerRemoteAsset(asset)
+      const parentId = sceneStore.selectedObjectId ?? 'Scene'
+      const created = sceneStore.addSceneObjectData({
+        type: 'pointCloud',
+        name: asset.name,
+        parentId,
+        assetId: asset.id
+      })
+      sceneStore.selectedObjectId = created.id
+      message.success(`点云 "${asset.name}" 已导入到场景`)
+    } catch (error: any) {
+      console.error('导入点云失败:', error)
+      message.error(`导入失败: ${error.message || '未知错误'}`)
+    } finally {
+      loading.value = false
+    }
+  }
+
   // 导入资产（根据类型处理）
   async function handleImportAsset(asset: AssetRef) {
     if (asset.type === 'model') {
       await handleImportModel(asset)
+    } else if (asset.type === 'pointCloud') {
+      await handleImportPointCloud(asset)
     } else if (asset.type === 'texture') {
       // 将贴图 URL 复制到剪贴板，用户可在材质面板粘贴或通过资产选择器选择
       try {
@@ -306,14 +335,6 @@ import { ensureUV2ForModel } from '@/utils/threeObjectFactory'
     document.removeEventListener('mousemove', onDrag)
     document.removeEventListener('mouseup', stopDrag)
   }
-
-  // 本地导入模型（不上传云端）
-  async function handleLocalModelImport(fileList: UploadFileInfo[]) {
-    const file = fileList[0]?.file
-    if (!file) return
-    const parentId = sceneStore.selectedObjectId ?? 'Scene'
-    await sceneStore.importModelFile(file, parentId)
-  }
 </script>
 
 <template>
@@ -397,21 +418,6 @@ import { ensureUV2ForModel } from '@/utils/threeObjectFactory'
               <span class="category-label">{{ currentCategory.label }}</span>
             </div>
             <div class="toolbar-right">
-              <!-- 本地导入（仅模型） -->
-              <n-upload
-                v-if="currentCategory.key === 'model'"
-                :default-upload="false"
-                :show-file-list="false"
-                :accept="currentCategory.accept"
-                @update:file-list="handleLocalModelImport"
-              >
-                <n-button size="small" quaternary>
-                  <template #icon>
-                    <n-icon><AddOutline /></n-icon>
-                  </template>
-                  本地导入
-                </n-button>
-              </n-upload>
               <!-- ZIP 导入（仅贴图） -->
               <n-upload
                 v-if="currentCategory.key === 'texture'"

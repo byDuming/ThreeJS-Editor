@@ -1,5 +1,5 @@
-export type AssetType = 'model' | 'texture' | 'image' | 'material' | 'hdri' | 'audio' | 'video' | 'other'
-export type AssetSource = 'local' | 'remote' | 'cloud'
+export type AssetType = 'model' | 'texture' | 'image' | 'material' | 'hdri' | 'audio' | 'video' | 'other' | 'pointCloud'
+export type AssetSource = 'cloud'
 
 export type AssetRef = {
   id: string

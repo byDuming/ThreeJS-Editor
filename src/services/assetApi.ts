@@ -103,7 +103,7 @@ export class AssetApi {
         type,
         uri: publicUrl,
         name: file.name,
-        source: 'remote',
+        source: 'cloud',
         meta: {
           ext,
           size: file.size,
@@ -176,8 +176,8 @@ export class AssetApi {
       throw new Error('Supabase Storage 未配置')
     }
 
-    // 只处理云端资产
-    if (asset.source !== 'remote' || !asset.uri) {
+    // 只处理云端资产（含 legacy source='remote' 的兼容）
+    if (!asset.uri || (asset.source !== 'cloud' && asset.source !== 'remote')) {
       return false
     }
 
@@ -237,7 +237,8 @@ export class AssetApi {
       return null
     }
 
-    if (asset.source !== 'remote' || !asset.uri) {
+    // 只处理云端资产（含 legacy source='remote' 的兼容）
+    if (!asset.uri || (asset.source !== 'cloud' && asset.source !== 'remote')) {
       return null
     }
 
@@ -277,7 +278,8 @@ export class AssetApi {
    * @returns 是否存在
    */
   async checkAssetExists(asset: AssetRef): Promise<boolean> {
-    if (!this.isStorageAvailable() || asset.source !== 'remote' || !asset.uri) {
+    // 只处理云端资产（含 legacy source='remote' 的兼容）
+    if (!this.isStorageAvailable() || !asset.uri || (asset.source !== 'cloud' && asset.source !== 'remote')) {
       return false
     }
 

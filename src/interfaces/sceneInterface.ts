@@ -38,7 +38,7 @@ export interface CameraSettings {
 export interface SceneObjectData {
   id: string;
   name?: string;
-  type: 'mesh' | 'model' | 'light' | 'camera' | 'group' | 'empty' | 'helper' | 'scene';
+  type: 'mesh' | 'model' | 'pointCloud' | 'light' | 'camera' | 'group' | 'empty' | 'helper' | 'scene';
 
   /**
    * Reference to an external asset (not full data).
