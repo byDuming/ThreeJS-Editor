@@ -481,24 +481,44 @@ function normalizeMaterial(input?: MaterialData): MaterialData {
 
 function normalizeLightUserData(input?: SceneObjectData['userData']) {
   const lightType = (input as any)?.lightType
-  if (lightType !== 'directionalLight') return input ?? {}
+  
+  // 只有支持阴影的光源类型才需要处理阴影配置
+  if (lightType !== 'directionalLight' && lightType !== 'spotLight' && lightType !== 'pointLight') {
+    return input ?? {}
+  }
+  
   const shadow = (input as any)?.shadow ?? {}
   const camera = shadow.camera ?? {}
+  
+  // 通用阴影配置
+  const baseShadow = {
+    ...shadow,
+    mapSize: shadow.mapSize ?? (lightType === 'directionalLight' ? [2048, 2048] : [1024, 1024]),
+    radius: shadow.radius ?? 4,
+    blurSamples: shadow.blurSamples ?? 8,
+    bias: shadow.bias ?? -0.0001,
+    normalBias: shadow.normalBias ?? 0.02,
+    camera: {
+      ...camera,
+      near: camera.near ?? 0.5,
+      far: camera.far ?? (lightType === 'directionalLight' ? 200 : 500)
+    }
+  }
+  
+  // DirectionalLight 使用正交相机，需要 left/right/top/bottom
+  if (lightType === 'directionalLight') {
+    baseShadow.camera = {
+      ...baseShadow.camera,
+      left: camera.left ?? -50,
+      right: camera.right ?? 50,
+      top: camera.top ?? 50,
+      bottom: camera.bottom ?? -50
+    }
+  }
+  
   return {
     ...input,
-    shadow: {
-      ...shadow,
-      mapSize: shadow.mapSize ?? [2048, 2048],
-      camera: {
-        ...camera,
-        left: camera.left ?? -50,
-        right: camera.right ?? 50,
-        top: camera.top ?? 50,
-        bottom: camera.bottom ?? -50,
-        near: camera.near ?? 0.5,
-        far: camera.far ?? 200
-      }
-    }
+    shadow: baseShadow
   }
 }
 

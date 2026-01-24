@@ -4,180 +4,163 @@
  * 职责：
  * - 撤销/重做功能
  * - 命令模式历史管理
- * - 批量操作分组
- * 
- * 基于 commandPattern.ts 中的 HistoryManager
+ * - 快照机制（旧模式，向后兼容）
  */
 
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import { useSceneCoreStore } from './useSceneCore.store'
-import { useSceneSelectionStore } from './useSceneSelection.store'
-import {
-  HistoryManager,
-  AddObjectCommand,
-  RemoveObjectCommand,
-  UpdateTransformCommand,
-  UpdateObjectCommand
-} from '@/utils/commandPattern'
+import { ref, computed, toRaw } from 'vue'
+import { HistoryManager, type ICommand } from '@/utils/commandPattern'
 import type { SceneObjectData } from '@/interfaces/sceneInterface'
 
-export const useSceneHistoryStore = defineStore('sceneHistory', () => {
-  const coreStore = useSceneCoreStore()
-  const selectionStore = useSceneSelectionStore()
+export type SceneSnapshot = {
+  objectDataList: SceneObjectData[]
+  selectedObjectId: string | null
+  aIds: number
+}
 
-  // ==================== 历史管理器 ====================
+export const useSceneHistoryStore = defineStore('sceneHistory', () => {
+
+  // ==================== 命令模式历史管理器 ====================
   
-  /** 命令模式历史管理器 */
+  /** 命令模式历史管理器（推荐使用） */
   const historyManager = new HistoryManager()
   
   /** 响应式版本号（用于触发UI更新） */
   const historyVersion = ref(0)
   
-  /** 是否正在恢复历史（防止递归记录） */
+  /** 是否使用命令模式（默认开启） */
+  const useCommandPattern = ref(true)
+
+  // ==================== 旧的快照机制（向后兼容） ====================
+  
+  /** 撤回栈：保存历史快照 */
+  const undoStack = ref<SceneSnapshot[]>([])
+  
+  /** 回退栈：保存已撤回的快照 */
+  const redoStack = ref<SceneSnapshot[]>([])
+  
+  /** 快照恢复中，防止递归记录 */
   const isRestoring = ref(false)
   
-  /** 是否使用命令模式（可以切换到旧的快照模式） */
-  const useCommandPattern = ref(true)
+  /** 最多保留的快照数量 */
+  const maxHistory = 50
+  
+  /** 去抖计时器 */
+  const historyDebounceTimer = ref<ReturnType<typeof setTimeout> | null>(null)
+  
+  /** 上一次用于入栈的快照 */
+  const lastSnapshot = ref<SceneSnapshot | null>(null)
+  
+  /** 标记是否有待处理的关键操作 */
+  const pendingCriticalOperation = ref(false)
+
+  // ==================== 快照序列化配置 ====================
+  
+  const snapshotKeyMode = ref<'blacklist' | 'whitelist'>('blacklist')
+  const snapshotKeyList = ref<string[]>([
+    'file',
+    'files',
+    'image',
+    'images',
+    'texture',
+    'textures',
+    '__threeObject'
+  ])
+
+  // ==================== 场景状态 ====================
+  
+  /** 场景是否加载完成（用于控制撤销/重做按钮的可用状态） */
+  const isSceneReady = ref(false)
 
   // ==================== 计算属性 ====================
   
   /** 是否可以撤销 */
-  const canUndo = computed(() => historyManager.canUndo())
+  const canUndo = computed(() => {
+    if (!isSceneReady.value) return false
+    void historyVersion.value // 读取以建立响应式依赖
+    if (useCommandPattern.value) {
+      return historyManager.canUndo()
+    } else {
+      return undoStack.value.length > 0
+    }
+  })
   
   /** 是否可以重做 */
-  const canRedo = computed(() => historyManager.canRedo())
-  
-  /** 撤销历史数量 */
-  const undoCount = computed(() => historyManager.getHistoryCount().undo)
-  
-  /** 重做历史数量 */
-  const redoCount = computed(() => historyManager.getHistoryCount().redo)
-  
-  /** 撤销历史列表 */
-  const undoHistory = computed(() => historyManager.getUndoHistory())
-  
-  /** 重做历史列表 */
-  const redoHistory = computed(() => historyManager.getRedoHistory())
+  const canRedo = computed(() => {
+    if (!isSceneReady.value) return false
+    void historyVersion.value
+    if (useCommandPattern.value) {
+      return historyManager.canRedo()
+    } else {
+      return redoStack.value.length > 0
+    }
+  })
 
-  // ==================== 核心操作（带历史记录） ====================
+  // ==================== 快照工具方法 ====================
   
-  /**
-   * 添加对象（带历史记录）
-   */
-  function addObject(data: SceneObjectData): SceneObjectData {
-    const cmd = new AddObjectCommand(
-      () => ({ 
-        addSceneObjectData: (d: SceneObjectData) => coreStore._addObjectData(d),
-        removeSceneObjectData: (id: string) => coreStore._removeObjectData(id)
-      } as any),
-      data
-    )
-    
-    cmd.execute()
-    historyManager.pushCommand(cmd)
-    historyVersion.value++
-    
-    return data
-  }
-  
-  /**
-   * 更新对象（带历史记录）
-   */
-  function updateObject(id: string, patch: Partial<SceneObjectData>): boolean {
-    const currentData = coreStore.getObjectById(id)
-    if (!currentData) return false
-    
-    // 保存更新前的数据
-    const initialData: Partial<SceneObjectData> = {}
-    for (const key of Object.keys(patch) as Array<keyof SceneObjectData>) {
-      (initialData as any)[key] = (currentData as any)[key]
-    }
-    
-    const cmd = new UpdateObjectCommand(
-      () => ({
-        objectDataList: coreStore.objectDataList,
-        updateSceneObjectData: (objId: string, p: Partial<SceneObjectData>) => coreStore._updateObjectData(objId, p)
-      } as any),
-      id,
-      patch,
-      initialData
-    )
-    
-    cmd.execute()
-    historyManager.pushCommand(cmd)
-    historyVersion.value++
-    
-    return true
-  }
-  
-  /**
-   * 更新变换（带历史记录，支持合并）
-   */
-  function updateTransform(
-    id: string, 
-    transform: SceneObjectData['transform'],
-    initialTransform?: SceneObjectData['transform']
-  ): boolean {
-    const cmd = new UpdateTransformCommand(
-      () => ({
-        objectDataList: coreStore.objectDataList,
-        updateSceneObjectData: (objId: string, p: Partial<SceneObjectData>) => coreStore._updateObjectData(objId, p)
-      } as any),
-      id,
-      transform,
-      initialTransform
-    )
-    
-    cmd.execute()
-    historyManager.pushCommand(cmd)
-    historyVersion.value++
-    
-    return true
-  }
-  
-  /**
-   * 删除对象（带历史记录）
-   */
-  function removeObject(id: string): SceneObjectData | null {
-    const cmd = new RemoveObjectCommand(
-      () => ({
-        objectDataList: coreStore.objectDataList,
-        addSceneObjectData: (d: SceneObjectData) => coreStore._addObjectData(d),
-        removeSceneObjectData: (objId: string) => coreStore._removeObjectData(objId)
-      } as any),
-      id
-    )
-    
-    cmd.execute()
-    historyManager.pushCommand(cmd)
-    historyVersion.value++
-    
-    // 如果删除的是选中对象，清除选择
-    if (selectionStore.selectedObjectId === id) {
-      selectionStore.clearSelection()
-    }
-    
-    return null
+  function setSnapshotKeyMode(mode: 'blacklist' | 'whitelist') {
+    snapshotKeyMode.value = mode
   }
 
-  // ==================== 撤销/重做 ====================
+  function setSnapshotKeyList(keys: string[]) {
+    snapshotKeyList.value = Array.from(new Set(keys))
+  }
+
+  /** 深拷贝并过滤不可序列化对象，保证快照稳定可用 */
+  function cloneSnapshot(value: SceneSnapshot): SceneSnapshot {
+    const raw = toRaw(value)
+    const seen = new WeakSet<object>()
+    const json = JSON.stringify(raw, (key, val) => {
+      if (key) {
+        const keyList = snapshotKeyList.value
+        if (snapshotKeyMode.value === 'blacklist' && keyList.includes(key)) return undefined
+        if (snapshotKeyMode.value === 'whitelist' && !keyList.includes(key)) return undefined
+      }
+      if (typeof val === 'function' || typeof val === 'symbol') return undefined
+      if (typeof File !== 'undefined' && val instanceof File) return undefined
+      if (typeof Blob !== 'undefined' && val instanceof Blob) return undefined
+      if (typeof ImageBitmap !== 'undefined' && val instanceof ImageBitmap) return undefined
+      if (typeof window !== 'undefined') {
+        if (val === window) return undefined
+        if (typeof Window !== 'undefined' && val instanceof Window) return undefined
+      }
+      if (val && typeof val === 'object') {
+        if (seen.has(val)) return undefined
+        seen.add(val)
+      }
+      return val
+    })
+    return JSON.parse(json) as SceneSnapshot
+  }
+
+  // ==================== 命令模式操作 ====================
+  
+  /**
+   * 推入命令到历史栈
+   */
+  function pushCommand(command: ICommand) {
+    historyManager.pushCommand(command)
+    historyVersion.value++
+  }
   
   /**
    * 撤销
    */
   function undo(): boolean {
-    if (!canUndo.value || isRestoring.value) return false
+    if (!canUndo.value) return false
     
-    isRestoring.value = true
-    try {
+    if (useCommandPattern.value) {
       const success = historyManager.undo()
       if (success) {
         historyVersion.value++
       }
       return success
-    } finally {
-      isRestoring.value = false
+    } else {
+      const snapshot = undoStack.value.pop()
+      if (!snapshot) return false
+      redoStack.value.push(lastSnapshot.value!)
+      lastSnapshot.value = snapshot
+      return true
     }
   }
   
@@ -185,47 +168,33 @@ export const useSceneHistoryStore = defineStore('sceneHistory', () => {
    * 重做
    */
   function redo(): boolean {
-    if (!canRedo.value || isRestoring.value) return false
+    if (!canRedo.value) return false
     
-    isRestoring.value = true
-    try {
+    if (useCommandPattern.value) {
       const success = historyManager.redo()
       if (success) {
         historyVersion.value++
       }
       return success
-    } finally {
-      isRestoring.value = false
+    } else {
+      const snapshot = redoStack.value.pop()
+      if (!snapshot) return false
+      undoStack.value.push(lastSnapshot.value!)
+      lastSnapshot.value = snapshot
+      return true
     }
   }
 
-  // ==================== 批量操作 ====================
+  // ==================== 快照模式操作 ====================
   
-  /**
-   * 开始操作分组
-   */
-  function beginGroup(description?: string) {
-    historyManager.beginGroup(description)
-  }
-  
-  /**
-   * 结束操作分组
-   */
-  function endGroup() {
-    historyManager.endGroup()
-    historyVersion.value++
-  }
-  
-  /**
-   * 执行分组操作（自动开始和结束分组）
-   */
-  function withGroup<T>(description: string, fn: () => T): T {
-    beginGroup(description)
-    try {
-      return fn()
-    } finally {
-      endGroup()
+  /** 推入历史栈，并清空回退栈 */
+  function pushHistorySnapshot(snapshot: SceneSnapshot) {
+    if (isRestoring.value) return
+    undoStack.value.push(cloneSnapshot(snapshot))
+    if (undoStack.value.length > maxHistory) {
+      undoStack.value.shift()
     }
+    redoStack.value = []
   }
 
   // ==================== 历史管理 ====================
@@ -233,60 +202,81 @@ export const useSceneHistoryStore = defineStore('sceneHistory', () => {
   /**
    * 清空历史
    */
-  function clearHistory() {
+  function clear() {
     historyManager.clear()
+    undoStack.value = []
+    redoStack.value = []
+    lastSnapshot.value = null
+    if (historyDebounceTimer.value) {
+      clearTimeout(historyDebounceTimer.value)
+      historyDebounceTimer.value = null
+    }
     historyVersion.value++
   }
   
   /**
-   * 标记当前状态为"干净"（用于判断是否有未保存的更改）
+   * 设置场景准备状态
    */
-  const savedHistoryVersion = ref(0)
-  
-  function markAsSaved() {
-    savedHistoryVersion.value = historyVersion.value
+  function setSceneReady(ready: boolean) {
+    isSceneReady.value = ready
   }
   
-  /** 是否有未保存的更改 */
-  const hasUnsavedChanges = computed(() => {
-    return historyVersion.value !== savedHistoryVersion.value
-  })
+  /**
+   * 设置恢复状态
+   */
+  function setRestoring(restoring: boolean) {
+    isRestoring.value = restoring
+  }
+  
+  /**
+   * 设置上次快照
+   */
+  function setLastSnapshot(snapshot: SceneSnapshot | null) {
+    lastSnapshot.value = snapshot ? cloneSnapshot(snapshot) : null
+  }
 
   // ==================== 返回 ====================
   
   return {
-    // 历史管理器
+    // 命令模式
     historyManager,
     historyVersion,
-    isRestoring,
     useCommandPattern,
+    
+    // 快照模式
+    undoStack,
+    redoStack,
+    isRestoring,
+    lastSnapshot,
+    pendingCriticalOperation,
+    historyDebounceTimer,
+    
+    // 快照配置
+    snapshotKeyMode,
+    snapshotKeyList,
+    setSnapshotKeyMode,
+    setSnapshotKeyList,
+    cloneSnapshot,
+    
+    // 场景状态
+    isSceneReady,
+    setSceneReady,
     
     // 计算属性
     canUndo,
     canRedo,
-    undoCount,
-    redoCount,
-    undoHistory,
-    redoHistory,
-    hasUnsavedChanges,
     
-    // 核心操作
-    addObject,
-    updateObject,
-    updateTransform,
-    removeObject,
-    
-    // 撤销/重做
+    // 命令模式操作
+    pushCommand,
     undo,
     redo,
     
-    // 批量操作
-    beginGroup,
-    endGroup,
-    withGroup,
+    // 快照模式操作
+    pushHistorySnapshot,
     
     // 历史管理
-    clearHistory,
-    markAsSaved
+    clear,
+    setRestoring,
+    setLastSnapshot
   }
 })

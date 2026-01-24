@@ -9,9 +9,19 @@
  */
 
 import type { SceneObjectData } from '@/interfaces/sceneInterface'
-import type { useSceneStore } from '@/stores/modules/useScene.store'
 
-type SceneStore = ReturnType<typeof useSceneStore>
+/**
+ * 场景 Store 操作接口
+ * 用于解耦命令模式和具体的 store 实现
+ */
+export interface ISceneStoreActions {
+  objectDataList: SceneObjectData[]
+  addSceneObjectData(data: SceneObjectData, options?: { skipHistory?: boolean }): SceneObjectData
+  updateSceneObjectData(id: string, patch: Partial<SceneObjectData>, options?: { skipHistory?: boolean }): SceneObjectData | null
+  removeSceneObjectData(id: string, options?: { skipHistory?: boolean }): void
+}
+
+type SceneStore = ISceneStoreActions
 
 /**
  * 命令接口

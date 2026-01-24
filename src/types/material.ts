@@ -109,6 +109,30 @@ interface BaseMaterialData {
    * @description 未设置时使用wrapS的值
    */
   wrapT?: TextureWrappingType;
+
+  /**
+   * 纹理重复次数（U方向）
+   * @default 1
+   */
+  repeatX?: number;
+
+  /**
+   * 纹理重复次数（V方向）
+   * @default 1
+   */
+  repeatY?: number;
+
+  /**
+   * 纹理偏移（U方向）
+   * @default 0
+   */
+  offsetX?: number;
+
+  /**
+   * 纹理偏移（V方向）
+   * @default 0
+   */
+  offsetY?: number;
   
   /** 
    * 纹理放大过滤
@@ -393,6 +417,13 @@ export interface MeshStandardMaterialData extends AOMaterialData {
    * 金属度贴图ID
    */
   metalnessMap?: string;
+
+  /**
+   * ARM打包贴图ID（AO/Roughness/Metalness）
+   * @description 将AO、粗糙度、金属度打包到RGB三个通道的贴图
+   * R通道=AO, G通道=Roughness, B通道=Metalness
+   */
+  armMap?: string;
 }
 
 /**

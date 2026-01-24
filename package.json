@@ -10,7 +10,9 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.90.1",
+    "jszip": "^3.10.1",
     "pinia": "^3.0.4",
+    "stats.js": "^0.17.0",
     "three": "^0.182.0",
     "ts-indexdb": "^0.0.8",
     "unplugin-auto-import": "^20.3.0",

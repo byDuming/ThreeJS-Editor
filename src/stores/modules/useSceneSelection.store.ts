@@ -3,32 +3,23 @@
  * 
  * 职责：
  * - 当前选中的对象ID
- * - 多选支持
  * - 变换模式和空间
- * - 选择相关的计算属性
+ * - 变换控制器步幅（snap）
+ * - 编辑模式状态
  */
 
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
-import { useSceneCoreStore } from './useSceneCore.store'
-import type { SceneObjectData } from '@/interfaces/sceneInterface'
+import { ref, computed } from 'vue'
 
 export const useSceneSelectionStore = defineStore('sceneSelection', () => {
-  const coreStore = useSceneCoreStore()
 
   // ==================== 选择状态 ====================
   
-  /** 当前选中的对象ID（单选） */
+  /** 当前选中的对象ID */
   const selectedObjectId = ref<string | null>(null)
   
   /** 选择版本号（用于触发重新渲染） */
   const selectionVersion = ref(0)
-  
-  /** 多选的对象ID集合 */
-  const selectedObjectIds = ref<Set<string>>(new Set())
-  
-  /** 是否启用多选模式 */
-  const multiSelectEnabled = ref(false)
 
   // ==================== 变换控制 ====================
   
@@ -37,125 +28,36 @@ export const useSceneSelectionStore = defineStore('sceneSelection', () => {
   
   /** 变换空间：世界坐标 或 本地坐标 */
   const transformSpace = ref<'world' | 'local'>('world')
+  
+  /** 变换控制器步幅（snap） */
+  const transformSnap = ref({
+    enabled: false,        // 是否启用步幅
+    translation: 0,        // 位移步幅（单位：米）
+    translationEnabled: false, // 位移步幅是否启用
+    rotation: 0,           // 旋转步幅（单位：弧度）
+    rotationEnabled: false,    // 旋转步幅是否启用
+    scale: 0,              // 缩放步幅（单位：倍数）
+    scaleEnabled: false        // 缩放步幅是否启用
+  })
+
+  // ==================== 编辑模式 ====================
+  
+  /** 是否为编辑模式（预览模式下禁用 TransformControls 等编辑功能） */
+  const isEditMode = ref(true)
 
   // ==================== 计算属性 ====================
   
-  /** 当前选中的对象数据 */
-  const selectedObjectData = computed((): SceneObjectData | null => {
-    if (!selectedObjectId.value) return null
-    return coreStore.getObjectById(selectedObjectId.value) ?? null
-  })
-  
   /** 是否有选中的对象 */
   const hasSelection = computed(() => selectedObjectId.value !== null)
-  
-  /** 选中对象的类型 */
-  const selectedObjectType = computed(() => selectedObjectData.value?.type ?? null)
-  
-  /** 多选的对象数据列表 */
-  const selectedObjectsData = computed((): SceneObjectData[] => {
-    if (!multiSelectEnabled.value || selectedObjectIds.value.size === 0) {
-      return selectedObjectData.value ? [selectedObjectData.value] : []
-    }
-    
-    return Array.from(selectedObjectIds.value)
-      .map(id => coreStore.getObjectById(id))
-      .filter((obj): obj is SceneObjectData => obj !== undefined)
-  })
-  
-  /** 选中的对象数量 */
-  const selectionCount = computed(() => {
-    if (multiSelectEnabled.value) {
-      return selectedObjectIds.value.size
-    }
-    return selectedObjectId.value ? 1 : 0
-  })
 
   // ==================== 选择操作 ====================
   
   /**
-   * 选择单个对象
+   * 选择对象
+   * @param id 对象ID，传 null 清空选择
    */
   function select(id: string | null) {
-    // 检查对象是否存在且可选
-    if (id) {
-      const obj = coreStore.getObjectById(id)
-      if (!obj || obj.selectable === false) {
-        return
-      }
-    }
-    
     selectedObjectId.value = id
-    selectionVersion.value++
-    
-    // 如果不是多选模式，清空多选集合
-    if (!multiSelectEnabled.value) {
-      selectedObjectIds.value.clear()
-      if (id) {
-        selectedObjectIds.value.add(id)
-      }
-    }
-  }
-  
-  /**
-   * 添加到选择（多选）
-   */
-  function addToSelection(id: string) {
-    const obj = coreStore.getObjectById(id)
-    if (!obj || obj.selectable === false) {
-      return
-    }
-    
-    selectedObjectIds.value.add(id)
-    
-    // 如果是第一个选中的，也设为主选中
-    if (!selectedObjectId.value) {
-      selectedObjectId.value = id
-    }
-    
-    selectionVersion.value++
-  }
-  
-  /**
-   * 从选择中移除
-   */
-  function removeFromSelection(id: string) {
-    selectedObjectIds.value.delete(id)
-    
-    // 如果移除的是主选中对象，切换到下一个
-    if (selectedObjectId.value === id) {
-      const remaining = Array.from(selectedObjectIds.value)
-      selectedObjectId.value = remaining[0] ?? null
-    }
-    
-    selectionVersion.value++
-  }
-  
-  /**
-   * 切换选择状态
-   */
-  function toggleSelection(id: string) {
-    if (selectedObjectIds.value.has(id)) {
-      removeFromSelection(id)
-    } else {
-      addToSelection(id)
-    }
-  }
-  
-  /**
-   * 选择多个对象
-   */
-  function selectMultiple(ids: string[]) {
-    selectedObjectIds.value.clear()
-    
-    for (const id of ids) {
-      const obj = coreStore.getObjectById(id)
-      if (obj && obj.selectable !== false) {
-        selectedObjectIds.value.add(id)
-      }
-    }
-    
-    selectedObjectId.value = ids[0] ?? null
     selectionVersion.value++
   }
   
@@ -164,30 +66,14 @@ export const useSceneSelectionStore = defineStore('sceneSelection', () => {
    */
   function clearSelection() {
     selectedObjectId.value = null
-    selectedObjectIds.value.clear()
     selectionVersion.value++
   }
   
   /**
-   * 选择全部（可见对象）
+   * 增加选择版本号（用于强制刷新）
    */
-  function selectAll() {
-    const selectableObjects = coreStore.objectDataList
-      .filter(obj => obj.selectable !== false && obj.visible !== false)
-    
-    selectMultiple(selectableObjects.map(obj => obj.id))
-  }
-  
-  /**
-   * 反选
-   */
-  function invertSelection() {
-    const currentIds = new Set(selectedObjectIds.value)
-    const newIds = coreStore.objectDataList
-      .filter(obj => obj.selectable !== false && !currentIds.has(obj.id))
-      .map(obj => obj.id)
-    
-    selectMultiple(newIds)
+  function bumpSelectionVersion() {
+    selectionVersion.value++
   }
 
   // ==================== 变换模式操作 ====================
@@ -223,81 +109,21 @@ export const useSceneSelectionStore = defineStore('sceneSelection', () => {
     transformSpace.value = transformSpace.value === 'world' ? 'local' : 'world'
   }
 
-  // ==================== 选择辅助 ====================
+  // ==================== 编辑模式操作 ====================
   
   /**
-   * 选择父对象
+   * 设置编辑模式
    */
-  function selectParent() {
-    if (!selectedObjectData.value?.parentId) return
-    select(selectedObjectData.value.parentId)
+  function setEditMode(isEdit: boolean) {
+    isEditMode.value = isEdit
   }
   
   /**
-   * 选择第一个子对象
+   * 切换编辑模式
    */
-  function selectFirstChild() {
-    if (!selectedObjectId.value) return
-    const children = coreStore.getChildren(selectedObjectId.value)
-    if (children.length > 0 && children[0]) {
-      select(children[0].id)
-    }
+  function toggleEditMode() {
+    isEditMode.value = !isEditMode.value
   }
-  
-  /**
-   * 选择同级下一个对象
-   */
-  function selectNextSibling() {
-    if (!selectedObjectData.value) return
-    
-    const parentId = selectedObjectData.value.parentId
-    const siblings = parentId 
-      ? coreStore.getChildren(parentId)
-      : coreStore.getRootObjects()
-    
-    const currentIndex = siblings.findIndex(obj => obj.id === selectedObjectId.value)
-    const nextSibling = siblings[currentIndex + 1]
-    if (currentIndex >= 0 && currentIndex < siblings.length - 1 && nextSibling) {
-      select(nextSibling.id)
-    }
-  }
-  
-  /**
-   * 选择同级上一个对象
-   */
-  function selectPrevSibling() {
-    if (!selectedObjectData.value) return
-    
-    const parentId = selectedObjectData.value.parentId
-    const siblings = parentId 
-      ? coreStore.getChildren(parentId)
-      : coreStore.getRootObjects()
-    
-    const currentIndex = siblings.findIndex(obj => obj.id === selectedObjectId.value)
-    const prevSibling = siblings[currentIndex - 1]
-    if (currentIndex > 0 && prevSibling) {
-      select(prevSibling.id)
-    }
-  }
-
-  // ==================== 监听器 ====================
-  
-  // 当对象被删除时，自动清除选择
-  watch(
-    () => coreStore.objectDataList.length,
-    () => {
-      if (selectedObjectId.value && !coreStore.getObjectById(selectedObjectId.value)) {
-        select(null)
-      }
-      
-      // 清理多选中已删除的对象
-      for (const id of selectedObjectIds.value) {
-        if (!coreStore.getObjectById(id)) {
-          selectedObjectIds.value.delete(id)
-        }
-      }
-    }
-  )
 
   // ==================== 返回 ====================
   
@@ -305,40 +131,29 @@ export const useSceneSelectionStore = defineStore('sceneSelection', () => {
     // 选择状态
     selectedObjectId,
     selectionVersion,
-    selectedObjectIds,
-    multiSelectEnabled,
+    hasSelection,
     
     // 变换控制
     transformMode,
     transformSpace,
+    transformSnap,
     
-    // 计算属性
-    selectedObjectData,
-    hasSelection,
-    selectedObjectType,
-    selectedObjectsData,
-    selectionCount,
+    // 编辑模式
+    isEditMode,
     
     // 选择操作
     select,
-    addToSelection,
-    removeFromSelection,
-    toggleSelection,
-    selectMultiple,
     clearSelection,
-    selectAll,
-    invertSelection,
+    bumpSelectionVersion,
     
-    // 变换模式
+    // 变换模式操作
     setTransformMode,
     cycleTransformMode,
     setTransformSpace,
     toggleTransformSpace,
     
-    // 选择辅助
-    selectParent,
-    selectFirstChild,
-    selectNextSibling,
-    selectPrevSibling
+    // 编辑模式操作
+    setEditMode,
+    toggleEditMode
   }
 })

@@ -3,6 +3,7 @@ import type { AssetRef } from '@/types/asset'
 import type { AnimationStorageData } from '@/types/animation'
 import { getDB, initDB, type SceneRow } from './db'
 import { cloudSync } from './cloudSync'
+import { supabase, TABLES } from './supabase'
 
 /**
  * 场景列表项（用于首页展示，不包含完整数据）
@@ -40,6 +41,10 @@ export interface UpdateSceneParams {
   rendererSettings?: Record<string, unknown>
   animationData?: AnimationStorageData
   thumbnail?: string
+  /** 跳过从云端获取当前场景数据（当已提供完整数据时使用，可显著提升性能） */
+  skipFetch?: boolean
+  /** 提供 createdAt 用于完整保存（跳过 fetch 时需要） */
+  createdAt?: Date
 }
 
 /**
@@ -427,30 +432,55 @@ export class SceneApi {
    * @returns 更新后的场景数据
    */
   async updateScene(params: UpdateSceneParams): Promise<SceneRow | null> {
-    // 先获取当前场景数据
-    const currentScene = await this.getSceneById(params.id, this.cloudSyncEnabled)
-    if (!currentScene) {
-      throw new Error(`场景 ID ${params.id} 不存在`)
-    }
+    const startTime = performance.now()
+    let updatedScene: SceneRow
 
-    // 构建更新后的场景数据
-    const updatedScene: SceneRow = {
-      ...currentScene,
-      name: params.name ?? currentScene.name,
-      aIds: params.aIds ?? currentScene.aIds,
-      version: params.version ?? currentScene.version,
-      objectDataList: params.objectDataList ?? currentScene.objectDataList,
-      assets: params.assets ?? currentScene.assets,
-      rendererSettings: params.rendererSettings ?? currentScene.rendererSettings,
-      animationData: params.animationData ?? currentScene.animationData,
-      thumbnail: params.thumbnail !== undefined ? params.thumbnail : currentScene.thumbnail,
-      updatedAt: new Date()
+    // 如果提供了 skipFetch 且有完整数据，直接构建更新数据（跳过网络请求，显著提升性能）
+    if (params.skipFetch && params.name !== undefined && params.objectDataList !== undefined) {
+      console.log('[sceneApi.updateScene] 使用 skipFetch 模式，跳过云端数据获取')
+      updatedScene = {
+        id: params.id,
+        name: params.name,
+        aIds: params.aIds ?? 1,
+        version: params.version ?? 1,
+        objectDataList: params.objectDataList,
+        assets: params.assets ?? [],
+        rendererSettings: params.rendererSettings ?? {},
+        animationData: params.animationData,
+        thumbnail: params.thumbnail,
+        updatedAt: new Date(),
+        createdAt: params.createdAt ?? new Date()
+      }
+    } else {
+      // 需要获取当前场景数据来合并（用于部分更新场景）
+      const fetchStartTime = performance.now()
+      const currentScene = await this.getSceneById(params.id, this.cloudSyncEnabled)
+      console.log(`[sceneApi.updateScene] getSceneById 耗时: ${(performance.now() - fetchStartTime).toFixed(0)}ms`)
+      if (!currentScene) {
+        throw new Error(`场景 ID ${params.id} 不存在`)
+      }
+
+      // 构建更新后的场景数据
+      updatedScene = {
+        ...currentScene,
+        name: params.name ?? currentScene.name,
+        aIds: params.aIds ?? currentScene.aIds,
+        version: params.version ?? currentScene.version,
+        objectDataList: params.objectDataList ?? currentScene.objectDataList,
+        assets: params.assets ?? currentScene.assets,
+        rendererSettings: params.rendererSettings ?? currentScene.rendererSettings,
+        animationData: params.animationData ?? currentScene.animationData,
+        thumbnail: params.thumbnail !== undefined ? params.thumbnail : currentScene.thumbnail,
+        updatedAt: new Date()
+      }
     }
 
     // 如果启用云同步，优先更新云端
     if (this.cloudSyncEnabled) {
       try {
+        const cloudStartTime = performance.now()
         const cloudScene = await cloudSync.uploadScene(updatedScene)
+        console.log(`[sceneApi.updateScene] cloudSync.uploadScene 耗时: ${(performance.now() - cloudStartTime).toFixed(0)}ms`)
         if (cloudScene?.id) {
           // 从云端数据转换为本地格式
           const objectDataList: SceneObjectData[] =
@@ -486,7 +516,10 @@ export class SceneApi {
           }
 
           // 同时保存到本地作为缓存
+          const localCacheStartTime = performance.now()
           await this.saveToLocal(result)
+          console.log(`[sceneApi.updateScene] saveToLocal 耗时: ${(performance.now() - localCacheStartTime).toFixed(0)}ms`)
+          console.log(`[sceneApi.updateScene] ✅ 更新完成 (云端)，总耗时: ${(performance.now() - startTime).toFixed(0)}ms`)
           return result
         }
       } catch (error: any) {
@@ -497,6 +530,7 @@ export class SceneApi {
     }
 
     // 如果云同步未启用或云端更新失败，使用本地数据库
+    const localStartTime = performance.now()
     await this.ensureDBInitialized()
     const db = getDB()
     await db.update_by_primaryKey({
@@ -515,6 +549,8 @@ export class SceneApi {
         return row
       }
     })
+    console.log(`[sceneApi.updateScene] 本地数据库更新耗时: ${(performance.now() - localStartTime).toFixed(0)}ms`)
+    console.log(`[sceneApi.updateScene] ✅ 更新完成 (本地)，总耗时: ${(performance.now() - startTime).toFixed(0)}ms`)
 
     return updatedScene
   }
@@ -535,6 +571,8 @@ export class SceneApi {
     animationData?: AnimationStorageData
     thumbnail?: string
   }): Promise<SceneRow | null> {
+    // 使用 skipFetch: true 跳过冗余的 getSceneById 调用
+    // 因为 saveScene 已经提供了完整的场景数据，无需再从云端获取
     return this.updateScene({
       id,
       name: sceneData.name,
@@ -544,8 +582,43 @@ export class SceneApi {
       assets: sceneData.assets,
       rendererSettings: sceneData.rendererSettings,
       animationData: sceneData.animationData,
-      thumbnail: sceneData.thumbnail
+      thumbnail: sceneData.thumbnail,
+      skipFetch: true // 性能优化：跳过冗余的网络请求
     })
+  }
+
+  /**
+   * 仅更新场景缩略图（用于异步上传截图后更新）
+   * @param id 场景 ID
+   * @param thumbnailUrl 缩略图 URL
+   */
+  async updateThumbnail(id: number, thumbnailUrl: string): Promise<void> {
+    if (this.cloudSyncEnabled) {
+      try {
+        await supabase
+          .from(TABLES.SCENES)
+          .update({ thumbnail: thumbnailUrl, updated_at: new Date().toISOString() })
+          .eq('id', id)
+      } catch (error) {
+        console.warn('更新云端缩略图失败:', error)
+      }
+    }
+
+    // 同时更新本地缓存
+    try {
+      await this.ensureDBInitialized()
+      const db = getDB()
+      await db.update_by_primaryKey({
+        tableName: 'sceneData',
+        value: id,
+        handle: (row: any) => {
+          row.thumbnail = thumbnailUrl
+          return row
+        }
+      })
+    } catch (error) {
+      console.warn('更新本地缩略图失败:', error)
+    }
   }
 
   /**

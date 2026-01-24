@@ -70,10 +70,13 @@ import {
   NearestMipmapLinearFilter,
   LinearMipmapLinearFilter,
   EquirectangularReflectionMapping,
+  SRGBColorSpace,
+  NoColorSpace,
   type Texture,
   type Wrapping,
   type MagnificationTextureFilter,
   type MinificationTextureFilter,
+  type BufferGeometry,
 
   ArrowHelper,
   AxesHelper,
@@ -103,6 +106,25 @@ const textureLoader = new TextureLoader()
 const cubeTextureLoader = new CubeTextureLoader()
 const rgbeLoader = new RGBELoader()
 const textureCache = new Map<string, Texture>()
+
+/**
+ * 判断贴图源是否有效
+ * 支持格式：
+ * - HTTP/HTTPS URLs（云存储）
+ * - data: URLs（Base64，向后兼容）
+ * - blob: URLs（临时本地文件）
+ */
+function isValidTextureSource(source?: string): boolean {
+  if (!source || typeof source !== 'string') return false
+  const trimmed = source.trim()
+  if (!trimmed) return false
+  return (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('data:') ||
+    trimmed.startsWith('blob:')
+  )
+}
 const wrapMap: Record<string, Wrapping> = {
   repeat: RepeatWrapping,
   clampToEdge: ClampToEdgeWrapping,
@@ -143,39 +165,83 @@ const depthFuncMap: Record<string, number> = {
   notequal: NotEqualDepth
 }
 
+/**
+ * 获取贴图对象
+ * 支持加载：
+ * - HTTP/HTTPS URLs（云存储，如 Supabase Storage）
+ * - data: URLs（Base64 编码，向后兼容旧数据）
+ * - blob: URLs（临时本地文件）
+ * 
+ * 会自动缓存已加载的贴图以避免重复加载
+ */
 function getTexture(source?: string) {
-  if (!source) return null
-  const cached = textureCache.get(source)
+  if (!isValidTextureSource(source)) return null
+  
+  const cached = textureCache.get(source!)
   if (cached) return cached
-  const texture = textureLoader.load(source)
-  textureCache.set(source, texture)
-  return texture
+  
+  try {
+    const texture = textureLoader.load(source!)
+    textureCache.set(source!, texture)
+    return texture
+  } catch (error) {
+    console.warn(`[getTexture] 加载贴图失败: ${source}`, error)
+    return null
+  }
 }
 
+/**
+ * 获取环境贴图
+ * 支持类型：
+ * - cube: 立方体贴图（6张图片）
+ * - hdr: HDR 环境贴图
+ * - equirect: 等距圆柱投影贴图
+ */
 function getEnvMapTexture(source?: string | string[], envMapType?: string) {
   if (!source) return null
   const resolvedType = envMapType ?? (Array.isArray(source) ? 'cube' : 'equirect')
 
   if (resolvedType === 'cube' && Array.isArray(source)) {
+    // 验证所有 URL 都有效
+    const validSources = source.filter(isValidTextureSource)
+    if (validSources.length !== source.length) {
+      console.warn('[getEnvMapTexture] 部分立方体贴图 URL 无效')
+      return null
+    }
+    
     const key = `cube:${source.join('|')}`
     const cached = textureCache.get(key)
     if (cached) return cached
-    const texture = cubeTextureLoader.load(source)
-    textureCache.set(key, texture)
-    return texture
+    
+    try {
+      const texture = cubeTextureLoader.load(source)
+      textureCache.set(key, texture)
+      return texture
+    } catch (error) {
+      console.warn('[getEnvMapTexture] 加载立方体贴图失败', error)
+      return null
+    }
   }
 
   if (resolvedType === 'hdr' && typeof source === 'string') {
+    if (!isValidTextureSource(source)) return null
+    
     const key = `hdr:${source}`
     const cached = textureCache.get(key)
     if (cached) return cached
-    const texture = rgbeLoader.load(source, (loaded) => {
-      loaded.mapping = EquirectangularReflectionMapping
-      loaded.needsUpdate = true
-    })
-    texture.mapping = EquirectangularReflectionMapping
-    textureCache.set(key, texture)
-    return texture
+    
+    try {
+      const texture = rgbeLoader.load(source, (loaded) => {
+        loaded.mapping = EquirectangularReflectionMapping
+        loaded.needsUpdate = true
+      })
+      texture.mapping = EquirectangularReflectionMapping
+      textureCache.set(key, texture)
+      return texture
+    } catch (error) {
+      console.warn('[getEnvMapTexture] 加载 HDR 贴图失败', error)
+      return null
+    }
   }
 
   if (typeof source === 'string') {
@@ -215,6 +281,18 @@ function applyTextureSettings(texture: Texture | null, mat: MaterialData) {
   if (mat.minFilter) {
     const minFilter = minFilterMap[mat.minFilter]
     if (minFilter !== undefined) texture.minFilter = minFilter
+  }
+  // 设置贴图重复次数
+  const repeatX = mat.repeatX ?? 1
+  const repeatY = mat.repeatY ?? 1
+  if (repeatX !== 1 || repeatY !== 1) {
+    texture.repeat.set(repeatX, repeatY)
+  }
+  // 设置贴图偏移
+  const offsetX = mat.offsetX ?? 0
+  const offsetY = mat.offsetY ?? 0
+  if (offsetX !== 0 || offsetY !== 0) {
+    texture.offset.set(offsetX, offsetY)
   }
   if ((texture as any).image !== null) {
     texture.needsUpdate = true
@@ -269,7 +347,9 @@ function applyMaterialSpecificProps(material: any, mat: MaterialData) {
   if (anyMat.iridescenceIOR !== undefined && 'iridescenceIOR' in material) material.iridescenceIOR = anyMat.iridescenceIOR
   if (anyMat.iridescenceThicknessRange && material.iridescenceThicknessRange) {
     const range = anyMat.iridescenceThicknessRange as [number, number]
-    material.iridescenceThicknessRange.set(range[0], range[1])
+    if (typeof material.iridescenceThicknessRange.set === 'function') {
+      material.iridescenceThicknessRange.set(range[0], range[1])
+    }
   }
   if (anyMat.specularIntensity !== undefined && 'specularIntensity' in material) material.specularIntensity = anyMat.specularIntensity
   if (anyMat.specularColor && material.specularColor) material.specularColor.set(anyMat.specularColor)
@@ -288,15 +368,27 @@ function applyMaterialSpecificProps(material: any, mat: MaterialData) {
   if (anyMat.sizeAttenuation !== undefined && 'sizeAttenuation' in material) material.sizeAttenuation = anyMat.sizeAttenuation
 }
 
+/**
+ * 设置贴图的颜色空间
+ * - 颜色贴图（map, emissiveMap, sheenColorMap, specularColorMap）使用 sRGB
+ * - 数据贴图（normal, roughness, metalness, ao, displacement 等）使用 NoColorSpace
+ */
+function setTextureColorSpace(texture: Texture | null, isColorMap: boolean) {
+  if (!texture) return
+  texture.colorSpace = isColorMap ? SRGBColorSpace : NoColorSpace
+}
+
 function applyMaps(material: any, mat: MaterialData) {
   const map = getTexture((mat as any).map)
   const alphaMap = getTexture((mat as any).alphaMap)
   const envMap = getEnvMapTexture((mat as any).envMap, (mat as any).envMapType)
   const normalMap = getTexture((mat as any).normalMap)
   const displacementMap = getTexture((mat as any).displacementMap)
-  const roughnessMap = getTexture((mat as any).roughnessMap)
-  const metalnessMap = getTexture((mat as any).metalnessMap)
-  const aoMap = getTexture((mat as any).aoMap)
+  // ARM 打包贴图：如果设置了 armMap，则作为 aoMap/roughnessMap/metalnessMap 的回退
+  const armMap = getTexture((mat as any).armMap)
+  const roughnessMap = getTexture((mat as any).roughnessMap) ?? armMap
+  const metalnessMap = getTexture((mat as any).metalnessMap) ?? armMap
+  const aoMap = getTexture((mat as any).aoMap) ?? armMap
   const lightMap = getTexture((mat as any).lightMap)
   const bumpMap = getTexture((mat as any).bumpMap)
   const emissiveMap = getTexture((mat as any).emissiveMap)
@@ -315,6 +407,36 @@ function applyMaps(material: any, mat: MaterialData) {
   const iridescenceThicknessMap = getTexture((mat as any).iridescenceThicknessMap)
   const specularIntensityMap = getTexture((mat as any).specularIntensityMap)
   const specularColorMap = getTexture((mat as any).specularColorMap)
+
+  // 设置贴图颜色空间
+  // 颜色贴图：sRGB
+  setTextureColorSpace(map, true)
+  setTextureColorSpace(emissiveMap, true)
+  setTextureColorSpace(sheenColorMap, true)
+  setTextureColorSpace(specularColorMap, true)
+  setTextureColorSpace(matcap, true) // matcap 包含颜色信息
+
+  // 数据贴图：NoColorSpace (线性)
+  setTextureColorSpace(alphaMap, false)
+  setTextureColorSpace(normalMap, false)
+  setTextureColorSpace(displacementMap, false)
+  setTextureColorSpace(roughnessMap, false)
+  setTextureColorSpace(metalnessMap, false)
+  setTextureColorSpace(aoMap, false)
+  setTextureColorSpace(lightMap, false)
+  setTextureColorSpace(bumpMap, false)
+  setTextureColorSpace(specularMap, false)
+  setTextureColorSpace(gradientMap, false)
+  setTextureColorSpace(transmissionMap, false)
+  setTextureColorSpace(thicknessMap, false)
+  setTextureColorSpace(anisotropyMap, false)
+  setTextureColorSpace(clearcoatNormalMap, false)
+  setTextureColorSpace(clearcoatMap, false)
+  setTextureColorSpace(clearcoatRoughnessMap, false)
+  setTextureColorSpace(sheenRoughnessMap, false)
+  setTextureColorSpace(iridescenceMap, false)
+  setTextureColorSpace(iridescenceThicknessMap, false)
+  setTextureColorSpace(specularIntensityMap, false)
 
   const setMap = (key: string, texture: Texture | null) => {
     if (texture) applyTextureSettings(texture, mat)
@@ -349,6 +471,45 @@ function applyMaps(material: any, mat: MaterialData) {
   setMap('specularColorMap', specularColorMap)
 }
 
+/**
+ * 确保几何体有 uv2 属性（用于 aoMap 和 lightMap）
+ * Three.js 的 aoMap 和 lightMap 默认使用第二套 UV 坐标
+ * 对于大多数情况，可以直接复制 uv 到 uv2
+ */
+export function ensureUV2(geometry: BufferGeometry) {
+  if (geometry.attributes.uv && !geometry.attributes.uv2) {
+    geometry.setAttribute('uv2', geometry.attributes.uv)
+  }
+}
+
+/**
+ * 遍历 Object3D 并为所有 Mesh 的几何体添加 uv2 属性
+ * 用于导入的 GLTF/GLB 模型，确保 aoMap 和 lightMap 正常工作
+ */
+export function ensureUV2ForModel(object: Object3D) {
+  object.traverse((child) => {
+    if ((child as Mesh).isMesh) {
+      const mesh = child as Mesh
+      const geometry = mesh.geometry as BufferGeometry
+      ensureUV2(geometry)
+    }
+  })
+}
+
+/** 递归设置对象及其所有子对象的阴影属性 */
+export function applyShadowRecursively(
+  obj: Object3D,
+  castShadow?: boolean,
+  receiveShadow?: boolean
+) {
+  obj.traverse((child) => {
+    if ((child as Mesh).isMesh) {
+      if (castShadow !== undefined) (child as Mesh).castShadow = castShadow
+      if (receiveShadow !== undefined) (child as Mesh).receiveShadow = receiveShadow
+    }
+  })
+}
+
 /** Sync Three transform from SceneObjectData */
 export function applyTransform(obj: Object3D, data: SceneObjectData) {
   const { position, rotation, scale } = data.transform
@@ -367,8 +528,17 @@ export function applyTransform(obj: Object3D, data: SceneObjectData) {
 export function syncThreeObjectState(obj: Object3D, data: SceneObjectData) {
   applyTransform(obj, data)
   obj.visible = data.visible ?? obj.visible
-  ;(obj as any).castShadow = data.castShadow ?? (obj as any).castShadow
-  ;(obj as any).receiveShadow = data.receiveShadow ?? (obj as any).receiveShadow
+
+  // 对于 model 类型，递归设置所有子 mesh 的阴影
+  if (data.type === 'model') {
+    if (data.castShadow !== undefined || data.receiveShadow !== undefined) {
+      applyShadowRecursively(obj, data.castShadow, data.receiveShadow)
+    }
+  } else {
+    ;(obj as any).castShadow = data.castShadow ?? (obj as any).castShadow
+    ;(obj as any).receiveShadow = data.receiveShadow ?? (obj as any).receiveShadow
+  }
+
   obj.frustumCulled = data.frustumCulled ?? obj.frustumCulled
   obj.renderOrder = data.renderOrder ?? obj.renderOrder
   obj.name = data.name ?? obj.name
@@ -397,8 +567,11 @@ export function applyLightSettings(light: any, data: SceneObjectData) {
     if (payload.skyColor && light.color) light.color.set(payload.skyColor)
     if (payload.groundColor && light.groundColor) light.groundColor.set(payload.groundColor)
   }
-  if (light.isDirectionalLight && payload.shadow) {
-    const shadow = payload.shadow
+  // 通用阴影配置（适用于 DirectionalLight、SpotLight、PointLight）
+  const canCastShadow = light.isDirectionalLight || light.isSpotLight || light.isPointLight
+  if (canCastShadow) {
+    const shadow = payload.shadow ?? {}
+    // 阴影贴图尺寸
     if (shadow.mapSize) {
       const size = shadow.mapSize as [number, number]
       light.shadow.mapSize.set(size[0], size[1])
@@ -406,16 +579,29 @@ export function applyLightSettings(light: any, data: SceneObjectData) {
         light.shadow.map.needsUpdate = true
       }
     }
-    if (shadow.camera) {
-      const camera = shadow.camera
+    // VSM 阴影需要 radius 和 blurSamples，必须设置默认值
+    light.shadow.radius = shadow.radius ?? 4
+    light.shadow.blurSamples = shadow.blurSamples ?? 8
+    // shadow.bias 用于防止阴影痤疮（条纹），shadow.normalBias 提供更好的效果
+    light.shadow.bias = shadow.bias ?? -0.0001
+    light.shadow.normalBias = shadow.normalBias ?? 0.02
+    // 阴影相机配置
+    const camera = shadow.camera ?? {}
+    // DirectionalLight 使用正交相机
+    if (light.isDirectionalLight) {
       if (camera.left !== undefined) light.shadow.camera.left = camera.left
       if (camera.right !== undefined) light.shadow.camera.right = camera.right
       if (camera.top !== undefined) light.shadow.camera.top = camera.top
       if (camera.bottom !== undefined) light.shadow.camera.bottom = camera.bottom
-      if (camera.near !== undefined) light.shadow.camera.near = camera.near
-      if (camera.far !== undefined) light.shadow.camera.far = camera.far
-      light.shadow.camera.updateProjectionMatrix()
     }
+    // SpotLight 使用透视相机，fov 自动从 light.angle 计算
+    if (light.isSpotLight && camera.fov !== undefined) {
+      light.shadow.camera.fov = camera.fov
+    }
+    // 所有类型都有 near 和 far
+    if (camera.near !== undefined) light.shadow.camera.near = camera.near
+    if (camera.far !== undefined) light.shadow.camera.far = camera.far
+    light.shadow.camera.updateProjectionMatrix()
   }
 }
 
@@ -685,6 +871,7 @@ function createMaterialFromData(mat?: MaterialData) {
 export function updateMeshGeometry(mesh: Mesh, geometry?: GeometryData) {
   if (!geometry) return
   const nextGeometry = createGeometryFromData(geometry)
+  ensureUV2(nextGeometry) // 确保有 uv2 属性，让 aoMap 和 lightMap 正常工作
   const prevGeometry = mesh.geometry
   mesh.geometry = nextGeometry
   if (prevGeometry && typeof (prevGeometry as any).dispose === 'function') {
@@ -866,12 +1053,12 @@ export function createThreeObject(data: SceneObjectData, opts?: { objectsMap?: M
     case 'model':
       obj = new Group()
       break
-    case 'mesh':
-      obj = new Mesh(
-        createGeometryFromData(data.mesh?.geometry),
-        createMaterialFromData(data.mesh?.material)
-      )
+    case 'mesh': {
+      const geometry = createGeometryFromData(data.mesh?.geometry)
+      ensureUV2(geometry) // 确保有 uv2 属性，让 aoMap 和 lightMap 正常工作
+      obj = new Mesh(geometry, createMaterialFromData(data.mesh?.material))
       break
+    }
     case 'camera': {
       const cameraOpts = data.camera as {
         fov?: number
@@ -891,6 +1078,8 @@ export function createThreeObject(data: SceneObjectData, opts?: { objectsMap?: M
       break
     case 'light':
       obj = createLightFromData(data)
+      // 立即应用灯光设置（包括阴影配置）
+      applyLightSettings(obj, data)
       break
     default:
       obj = new Object3D()
@@ -901,3 +1090,6 @@ export function createThreeObject(data: SceneObjectData, opts?: { objectsMap?: M
   applyTransform(obj, data)
   return obj
 }
+
+// 导出验证函数供其他模块使用
+export { isValidTextureSource }

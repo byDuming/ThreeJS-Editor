@@ -1,8 +1,8 @@
 <script setup lang="ts">
-  import { computed } from 'vue'
+  import { computed, ref, onMounted, onBeforeUnmount, watchEffect } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { useSceneStore } from '@/stores/modules/useScene.store'
-  import { Move, Resize , Magnet } from '@vicons/ionicons5'
+  import { Move, Resize , Magnet, SpeedometerOutline } from '@vicons/ionicons5'
   import { Md3DRotationFilled } from '@vicons/material'
   // 场景视图
   import Scene from '@/components/Scene.vue'
@@ -13,11 +13,18 @@
   // 数值输入控件
   import NumberInput from '@/components/panels/NumberInput.vue'
   import DialogOverlayHost from '@/dialog/DialogOverlayHost.vue'
+  // 性能面板
+  import StatsPanel from '@/components/panels/StatsPanel.vue'
   
   const sceneStore = useSceneStore()
 
   const route = useRoute()
   const router = useRouter()
+  
+  // 性能面板显示控制
+  const showStatsPanel = ref(false)
+  // 用户是否手动操作过（手动操作后不再自动切换）
+  const userToggledStats = ref(false)
 
   // 从 URL 获取场景ID，传递给 Scene 组件
   const sceneId = computed(() => {
@@ -61,6 +68,40 @@
   function goBack() {
     router.push('/')
   }
+
+  // 切换性能面板显示
+  function toggleStatsPanel() {
+    userToggledStats.value = true  // 标记用户手动操作
+    showStatsPanel.value = !showStatsPanel.value
+  }
+
+  // 根据编辑/预览模式自动控制性能面板（用户手动操作前）
+  watchEffect(() => {
+    if (!userToggledStats.value) {
+      showStatsPanel.value = isEditMode.value
+    }
+  })
+
+  // 快捷键处理
+  function handleKeyDown(event: KeyboardEvent) {
+    // 忽略输入框内的按键
+    const tag = (event.target as HTMLElement)?.tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+
+    // 按 ` 或 ~ 键切换性能面板
+    if (event.key === '`' || event.key === '~') {
+      event.preventDefault()
+      toggleStatsPanel()
+    }
+  }
+
+  onMounted(() => {
+    window.addEventListener('keydown', handleKeyDown)
+  })
+
+  onBeforeUnmount(() => {
+    window.removeEventListener('keydown', handleKeyDown)
+  })
 </script>
 
 <template>
@@ -70,6 +111,8 @@
       <div class="scene-area">
         <Scene :scene-id="sceneId" :mode="currentMode" />
         <DialogOverlayHost />
+        <!-- 性能监控面板 -->
+        <StatsPanel v-if="showStatsPanel" />
       </div>
       <!-- 底部资产面板 - 仅编辑模式显示 -->
       <BottomAssetPanel v-show="isEditMode" />
@@ -223,6 +266,20 @@
           </template>
           预览
         </n-button>
+        <!-- 性能面板开关 -->
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <n-button 
+              :type="showStatsPanel ? 'primary' : 'default'" 
+              @click="toggleStatsPanel"
+            >
+              <template #icon>
+                <n-icon><SpeedometerOutline /></n-icon>
+              </template>
+            </n-button>
+          </template>
+          性能监控 (`)
+        </n-tooltip>
       </n-space>
     </div>
   </div>

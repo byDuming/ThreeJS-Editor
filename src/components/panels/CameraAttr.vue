@@ -5,12 +5,12 @@
   import NumberInput from './NumberInput.vue'
 
   const sceneStore = useSceneStore()
-  const cameraSettings = computed(() => sceneStore.currentObjectData?.camera as CameraSettings | undefined)
+  const cameraSettings = computed(() => sceneStore.selectedObjectData?.camera as CameraSettings | undefined)
 
   function updateCameraSettings(patch: Partial<CameraSettings>) {
     const id = sceneStore.selectedObjectId
     if (!id) return
-    const current = sceneStore.currentObjectData?.camera ?? {}
+    const current = sceneStore.selectedObjectData?.camera ?? {}
     sceneStore.updateSceneObjectData(id, { camera: { ...current, ...patch } } as any)
   }
 </script>

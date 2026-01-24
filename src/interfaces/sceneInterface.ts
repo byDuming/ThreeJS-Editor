@@ -31,6 +31,8 @@ export interface CameraSettings {
   fov?: number;
   near?: number;
   far?: number;
+  /** 相机控制器的目标点（用于保存/恢复视角） */
+  target?: [number, number, number];
 }
 
 export interface SceneObjectData {

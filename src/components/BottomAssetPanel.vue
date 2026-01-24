@@ -14,12 +14,17 @@
     ColorPaletteOutline,
     SunnyOutline,
     PlayOutline,
-    FolderOutline
+    FolderOutline,
+    FolderOpenOutline
   } from '@vicons/ionicons5'
   import { DeleteFilled } from '@vicons/material'
   import type { AssetRef } from '@/types/asset'
   // 时间轴组件
   import { Timeline } from '@/components/timeline'
+// 贴图压缩包解析
+import { parseTexturePack, getTextureSlotLabel, type TexturePackResult } from '@/utils/texturePackLoader'
+// UV2 处理
+import { ensureUV2ForModel } from '@/utils/threeObjectFactory'
 
   const sceneStore = useSceneStore()
   const uiEditorStore = useUiEditorStore()
@@ -33,6 +38,12 @@
   const dragStartY = ref(0)
   const dragStartHeight = ref(0)
   const globalAssets = ref<AssetRef[]>([])  // 全局资产列表
+
+  // ZIP 贴图包导入相关
+  const showZipDialog = ref(false)
+  const zipParseResult = ref<TexturePackResult | null>(null)
+  const zipUploading = ref(false)
+  const zipUploadProgress = ref(0)
 
   // 资产类别配置
   const categories: Array<{ key: AssetCategory; label: string; icon: any; accept: string; description: string }> = [
@@ -144,6 +155,8 @@
       
       const target = sceneStore.objectsMap.get(created.id)
       if (target && gltf.scene) {
+        // 确保模型的所有 Mesh 都有 uv2 属性（用于 aoMap 和 lightMap）
+        ensureUV2ForModel(gltf.scene)
         target.children.slice().forEach((child: any) => target.remove(child))
         target.add(gltf.scene)
         sceneStore.selectedObjectId = created.id
@@ -162,11 +175,86 @@
     if (asset.type === 'model') {
       await handleImportModel(asset)
     } else if (asset.type === 'texture') {
-      // TODO: 应用贴图到选中材质
-      message.info('贴图功能开发中')
+      // 将贴图 URL 复制到剪贴板，用户可在材质面板粘贴或通过资产选择器选择
+      try {
+        await navigator.clipboard.writeText(asset.uri)
+        message.success(`贴图 "${asset.name}" URL 已复制，可在材质面板选择应用`)
+      } catch {
+        message.info(`贴图 URL: ${asset.uri}`)
+      }
     } else if (asset.type === 'hdri') {
       // TODO: 应用HDRI到场景环境
       message.info('HDRI功能开发中')
+    }
+  }
+
+  // 处理 ZIP 贴图包上传
+  async function handleZipUpload(fileList: UploadFileInfo[]) {
+    const file = fileList[0]?.file
+    if (!file) return
+
+    if (!file.name.toLowerCase().endsWith('.zip')) {
+      message.error('请上传 ZIP 压缩包')
+      return
+    }
+
+    try {
+      loading.value = true
+      message.info('正在解析压缩包...')
+      zipParseResult.value = await parseTexturePack(file)
+      
+      if (zipParseResult.value.textures.length === 0) {
+        message.warning('未在压缩包中找到可识别的贴图文件')
+        return
+      }
+      
+      showZipDialog.value = true
+    } catch (error: any) {
+      console.error('解析压缩包失败:', error)
+      message.error(`解析失败: ${error.message || '未知错误'}`)
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // 上传 ZIP 中的所有贴图
+  async function uploadZipTextures() {
+    if (!zipParseResult.value || !assetApi.isStorageAvailable()) return
+
+    const textures = zipParseResult.value.textures
+    zipUploading.value = true
+    zipUploadProgress.value = 0
+
+    const uploadedAssets: AssetRef[] = []
+    const failed: string[] = []
+
+    for (let i = 0; i < textures.length; i++) {
+      const texture = textures[i]!
+      try {
+        const result = await assetApi.uploadAsset({
+          file: texture.file,
+          type: 'texture',
+        })
+        uploadedAssets.push(result.asset)
+        sceneStore.registerRemoteAsset(result.asset)
+      } catch (error) {
+        console.error(`上传 ${texture.fileName} 失败:`, error)
+        failed.push(texture.fileName)
+      }
+      zipUploadProgress.value = Math.round(((i + 1) / textures.length) * 100)
+    }
+
+    // 更新本地列表
+    globalAssets.value = [...uploadedAssets, ...globalAssets.value]
+
+    zipUploading.value = false
+    showZipDialog.value = false
+    zipParseResult.value = null
+
+    if (failed.length > 0) {
+      message.warning(`${uploadedAssets.length} 个贴图上传成功，${failed.length} 个失败`)
+    } else {
+      message.success(`${uploadedAssets.length} 个贴图全部上传成功`)
     }
   }
 
@@ -324,6 +412,22 @@
                   本地导入
                 </n-button>
               </n-upload>
+              <!-- ZIP 导入（仅贴图） -->
+              <n-upload
+                v-if="currentCategory.key === 'texture'"
+                :default-upload="false"
+                :show-file-list="false"
+                accept=".zip"
+                @update:file-list="handleZipUpload"
+                :disabled="loading"
+              >
+                <n-button size="small" quaternary>
+                  <template #icon>
+                    <n-icon><FolderOpenOutline /></n-icon>
+                  </template>
+                  导入压缩包
+                </n-button>
+              </n-upload>
               <!-- 云端上传 -->
               <n-upload
                 :default-upload="false"
@@ -355,11 +459,12 @@
                     @click="handleImportAsset(asset)"
                   >
                     <!-- 预览图 -->
-                    <div class="asset-preview">
+                    <div class="asset-preview" :class="{ 'texture-preview': asset.type === 'texture' }">
                       <img
-                        v-if="asset.thumbnail"
-                        :src="asset.thumbnail"
+                        v-if="asset.thumbnail || asset.type === 'texture'"
+                        :src="asset.thumbnail || asset.uri"
                         :alt="asset.name"
+                        loading="lazy"
                       />
                       <n-icon v-else size="32" color="#1d1d1d">
                         <component :is="currentCategory.icon" />
@@ -400,6 +505,79 @@
         </div>
       </div>
     </div>
+
+    <!-- ZIP 解析结果弹窗 -->
+    <n-modal
+      v-model:show="showZipDialog"
+      preset="card"
+      title="导入 PBR 贴图包"
+      :style="{ width: '500px' }"
+      :mask-closable="!zipUploading"
+      :closable="!zipUploading"
+    >
+      <div v-if="zipParseResult" class="zip-result">
+        <div class="zip-info">
+          <span>已识别 {{ zipParseResult.textures.length }} 张贴图</span>
+        </div>
+
+        <!-- 识别的贴图列表 -->
+        <n-scrollbar style="max-height: 300px;">
+          <div class="texture-list">
+            <div
+              v-for="texture in zipParseResult.textures"
+              :key="texture.fileName"
+              class="texture-list-item"
+            >
+              <div class="texture-slot-badge">
+                {{ getTextureSlotLabel(texture.slot) }}
+              </div>
+              <span class="texture-file-name">{{ texture.fileName }}</span>
+            </div>
+          </div>
+        </n-scrollbar>
+
+        <!-- 未识别的文件 -->
+        <div v-if="zipParseResult.unmatched.length > 0" class="unmatched-section">
+          <div class="unmatched-header">
+            <span>{{ zipParseResult.unmatched.length }} 个文件未识别（将跳过）</span>
+          </div>
+          <n-collapse>
+            <n-collapse-item title="查看未识别文件">
+              <div class="unmatched-list">
+                <span v-for="name in zipParseResult.unmatched" :key="name" class="unmatched-item">
+                  {{ name }}
+                </span>
+              </div>
+            </n-collapse-item>
+          </n-collapse>
+        </div>
+
+        <!-- 上传进度 -->
+        <n-progress
+          v-if="zipUploading"
+          type="line"
+          :percentage="zipUploadProgress"
+          :indicator-placement="'inside'"
+          processing
+        />
+      </div>
+
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showZipDialog = false" :disabled="zipUploading">
+            取消
+          </n-button>
+          <n-button
+            type="primary"
+            @click="uploadZipTextures"
+            :loading="zipUploading"
+            :disabled="!zipParseResult?.textures.length"
+          >
+            上传全部
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </div>
 </template>
 
@@ -609,6 +787,15 @@
   object-fit: cover;
 }
 
+.asset-preview.texture-preview {
+  background: linear-gradient(45deg, #ddd 25%, transparent 25%),
+    linear-gradient(-45deg, #ddd 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #ddd 75%),
+    linear-gradient(-45deg, transparent 75%, #ddd 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+}
+
 .asset-overlay {
   position: absolute;
   inset: 0;
@@ -654,5 +841,80 @@
 .empty-hint {
   font-size: 11px;
   color: #666;
+}
+
+/* ZIP 导入弹窗样式 */
+.zip-result {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.zip-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #333;
+}
+
+.texture-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.texture-list-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #f5f5f5;
+  border-radius: 6px;
+}
+
+.texture-slot-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: #18a058;
+  color: white;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.texture-file-name {
+  font-size: 13px;
+  color: #666;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unmatched-section {
+  margin-top: 8px;
+}
+
+.unmatched-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #f0a020;
+  margin-bottom: 8px;
+}
+
+.unmatched-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.unmatched-item {
+  font-size: 12px;
+  padding: 4px 8px;
+  background: #f5f5f5;
+  border-radius: 4px;
+  color: #999;
 }
 </style>

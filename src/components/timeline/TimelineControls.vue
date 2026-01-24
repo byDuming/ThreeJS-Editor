@@ -158,10 +158,9 @@ const playModeOptions = [
       </n-button>
       
       <!-- 播放完成后重置 -->
-      <n-tooltip>
+      <n-tooltip v-if="animationStore.activeClip">
         <template #trigger>
           <n-switch
-            v-if="animationStore.activeClip"
             :value="animationStore.activeClip.resetOnComplete"
             size="small"
             @update:value="(value: boolean) => animationStore.activeClip && animationStore.updateClip(animationStore.activeClip.id, { resetOnComplete: value })"
@@ -174,16 +173,18 @@ const playModeOptions = [
       </span>
       
       <!-- 是否启动（控制是否参与自动播放） -->
-      <n-tooltip v-if="animationStore.activeClip && animationStore.activeClip.playMode === 'auto'">
-        <template #trigger>
-          <n-switch
-            :value="animationStore.activeClip.enabled ?? true"
-            size="small"
-            @update:value="(value: boolean) => animationStore.activeClip && animationStore.updateClip(animationStore.activeClip.id, { enabled: value })"
-          />
-        </template>
-        {{ (animationStore.activeClip?.enabled ?? true) ? '已启用，将参与自动播放' : '已禁用，不会自动播放' }}
-      </n-tooltip>
+      <template v-if="animationStore.activeClip && animationStore.activeClip.playMode === 'auto'">
+        <n-tooltip>
+          <template #trigger>
+            <n-switch
+              :value="animationStore.activeClip.enabled ?? true"
+              size="small"
+              @update:value="(value: boolean) => animationStore.activeClip && animationStore.updateClip(animationStore.activeClip.id, { enabled: value })"
+            />
+          </template>
+          {{ (animationStore.activeClip?.enabled ?? true) ? '已启用，将参与自动播放' : '已禁用，不会自动播放' }}
+        </n-tooltip>
+      </template>
       <span 
         v-if="animationStore.activeClip && animationStore.activeClip.playMode === 'auto'" 
         class="enabled-label" 
@@ -204,16 +205,18 @@ const playModeOptions = [
       />
       
       <!-- 自动播放时是否排队（只在自动播放模式时显示） -->
-      <n-tooltip v-if="animationStore.activeClip && animationStore.activeClip.playMode === 'auto'">
-        <template #trigger>
-          <n-switch
-            :value="animationStore.activeClip.queueOnAutoPlay ?? true"
-            size="small"
-            @update:value="(value: boolean) => animationStore.activeClip && animationStore.updateClip(animationStore.activeClip.id, { queueOnAutoPlay: value })"
-          />
-        </template>
-        {{ (animationStore.activeClip?.queueOnAutoPlay ?? true) ? '自动播放时排队顺序播放' : '自动播放时同时播放所有启用的剪辑' }}
-      </n-tooltip>
+      <template v-if="animationStore.activeClip && animationStore.activeClip.playMode === 'auto'">
+        <n-tooltip>
+          <template #trigger>
+            <n-switch
+              :value="animationStore.activeClip.queueOnAutoPlay ?? true"
+              size="small"
+              @update:value="(value: boolean) => animationStore.activeClip && animationStore.updateClip(animationStore.activeClip.id, { queueOnAutoPlay: value })"
+            />
+          </template>
+          {{ (animationStore.activeClip?.queueOnAutoPlay ?? true) ? '自动播放时排队顺序播放' : '自动播放时同时播放所有启用的剪辑' }}
+        </n-tooltip>
+      </template>
       <span 
         v-if="animationStore.activeClip && animationStore.activeClip.playMode === 'auto'" 
         class="queue-label" 

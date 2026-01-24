@@ -8,6 +8,11 @@ import Components from 'unplugin-vue-components/vite'
 
 // https://vite.dev/config/
 export default defineConfig({
+  server: {
+    port: 4000,
+    open: true,
+    host: '0.0.0.0'
+  },
   base: '/ThreeJS-Editor/',   // GitHub Pages 仓库名称
   build: { 
     outDir: 'dist',

@@ -1,5 +1,5 @@
 import { ref, shallowRef, onBeforeUnmount, watch } from 'vue'
-import { Scene, PerspectiveCamera, Color, Clock, type ToneMapping } from 'three'
+import { Scene, PerspectiveCamera, Color, Clock, type ToneMapping, type ShadowMapType } from 'three'
 import { WebGPURenderer } from 'three/webgpu'
 import {
   WebGLRenderer,
@@ -21,6 +21,7 @@ import { MapControls } from 'three/addons/controls/MapControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { useUiEditorStore } from '@/stores/modules/uiEditor.store.ts'
 import { pluginManager } from '@/core'
+import { useGlobalStats } from '@/composables/useStats'
 
 /**
  * 渲染器与交互控制逻辑（纯三维层，不关心 UI）：
@@ -35,6 +36,7 @@ import { pluginManager } from '@/core'
  */
 export function useRenderer(opts: { antialias?: boolean } = {}) {
   const sceneStore = useSceneStore()
+  const globalStats = useGlobalStats()
   const container = ref<HTMLElement | null>(null)
   const camera = shallowRef<PerspectiveCamera | null>(null)
   const controls = shallowRef<MapControls | null>(null)
@@ -123,7 +125,33 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
 
     // 创建 MapControls
     controls.value = new MapControls(camera.value, container.value)
-    controls.value.target.set(0, 0, 0)
+    
+    // 从保存的数据恢复目标点，如果没有则使用默认值
+    const cameraData = sceneStore.objectDataList.find(item => item.type === 'camera')
+    const savedTarget = cameraData?.camera?.target
+    if (savedTarget) {
+      controls.value.target.set(savedTarget[0], savedTarget[1], savedTarget[2])
+      console.log('[setupControls] 从保存数据恢复相机目标点:', savedTarget)
+    } else {
+      controls.value.target.set(0, 0, 0)
+    }
+    
+    // 监听 controls 变化，同步目标点到 store（用于保存）
+    controls.value.addEventListener('change', () => {
+      if (controls.value) {
+        sceneStore.setCameraControlsTarget([
+          controls.value.target.x,
+          controls.value.target.y,
+          controls.value.target.z
+        ])
+      }
+    })
+    // 初始化时也同步一次
+    sceneStore.setCameraControlsTarget([
+      controls.value.target.x,
+      controls.value.target.y,
+      controls.value.target.z
+    ])
 
     // 创建 TransformControls
     transformControls.value = new TransformControls(camera.value, sceneStore.renderer.domElement)
@@ -212,6 +240,9 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
       return
     }
     sceneStore.renderer.setAnimationLoop(() => {
+      // 性能统计：开始计时
+      globalStats.begin()
+      
       // delta（秒）
       const delta = clock.getDelta()
       // 同步 context.three 引用（相机/场景可能在切场景时变化）
@@ -229,6 +260,10 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
       sceneStore.renderer!.render(sceneStore.threeScene!, camera.value!)
       if (ctx) pluginManager.callHook('onAfterRender', delta, ctx as any)
       processScreenshot()
+      
+      // 性能统计：更新场景信息并结束计时
+      globalStats.updateSceneInfo(sceneStore.renderer)
+      globalStats.end()
     })
   }
 
@@ -274,8 +309,29 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
         vsm: VSMShadowMap
       }
       if (settings.shadowType in shadowTypeMap) {
-        ;(renderer as any).shadowMap.type = shadowTypeMap[settings.shadowType]
+        const newType = shadowTypeMap[settings.shadowType]
+        const oldType = (renderer as any).shadowMap.type
+        ;(renderer as any).shadowMap.type = newType
+        console.log(`[Shadow] 切换阴影类型: ${oldType} -> ${newType} (VSM=${VSMShadowMap})`)
+        // 切换阴影类型时需要强制更新阴影贴图
+        if (oldType !== newType) {
+          // 清除所有灯光的阴影贴图，强制重新创建
+          if (sceneStore.threeScene) {
+            sceneStore.threeScene.traverse((obj: any) => {
+              if (obj.isLight && obj.shadow) {
+                console.log(`[Shadow] 灯光: ${obj.name}, castShadow=${obj.castShadow}, radius=${obj.shadow.radius}, blurSamples=${obj.shadow.blurSamples}`)
+                if (obj.shadow.map) {
+                  obj.shadow.map.dispose()
+                  obj.shadow.map = null
+                }
+              }
+            })
+          }
+          ;(renderer as any).shadowMap.needsUpdate = true
+        }
       }
+    } else if ((renderer as any).shadowMap) {
+      console.warn('[Shadow] 当前使用 WebGPU 渲染器，VSM 阴影可能不支持')
     }
   }
 
@@ -295,7 +351,22 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
     // 创建新渲染器
     const antialias = opts.antialias ?? sceneStore.rendererSettings.antialias
     if (sceneStore.rendererSettings.rendererType === 'webgl') {
-      sceneStore.renderer = new WebGLRenderer({ antialias })
+      const renderer = new WebGLRenderer({ antialias })
+      // 在创建时就启用阴影
+      renderer.shadowMap.enabled = sceneStore.rendererSettings.shadows
+      // 设置阴影类型
+      const shadowTypeMap: Record<string, number> = {
+        basic: BasicShadowMap,
+        pcf: PCFShadowMap,
+        pcfSoft: PCFSoftShadowMap,
+        vsm: VSMShadowMap
+      }
+      const shadowType = sceneStore.rendererSettings.shadowType
+      if (shadowType in shadowTypeMap) {
+        renderer.shadowMap.type = shadowTypeMap[shadowType] as ShadowMapType
+      }
+      console.log(`[Shadow] 创建 WebGL 渲染器, 阴影类型: ${shadowType} (${renderer.shadowMap.type}), VSM=${VSMShadowMap}`)
+      sceneStore.renderer = renderer
     } else {
       sceneStore.renderer = new WebGPURenderer({ antialias })
     }
@@ -339,6 +410,19 @@ export function useRenderer(opts: { antialias?: boolean } = {}) {
 
     // 6. 更新控制器的相机引用
     updateControlsCamera()
+    
+    // 6.5 从保存的数据恢复相机目标点
+    if (controls.value) {
+      const cameraData = sceneStore.objectDataList.find(item => item.type === 'camera')
+      const savedTarget = cameraData?.camera?.target
+      if (savedTarget) {
+        controls.value.target.set(savedTarget[0], savedTarget[1], savedTarget[2])
+        controls.value.update()
+        // 同步到 store
+        sceneStore.setCameraControlsTarget([savedTarget[0], savedTarget[1], savedTarget[2]])
+        console.log('[switchScene] 从保存数据恢复相机目标点:', savedTarget)
+      }
+    }
 
     // 7. 确保 transformControls 的 gizmo 在新场景中
     if (transformControls.value && sceneStore.threeScene) {

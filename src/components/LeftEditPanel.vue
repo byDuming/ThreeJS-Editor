@@ -152,9 +152,9 @@
   function handleSelect(key: string | number) {
     switch (key) {
       case 'rename-object': {
-        const currentName = sceneStore.currentObjectData?.name ?? ''
+        const currentName = sceneStore.selectedObjectData?.name ?? ''
         const id = sceneStore.selectedObjectId
-        if (!id || sceneStore.currentObjectData?.type === 'scene') {
+        if (!id || sceneStore.selectedObjectData?.type === 'scene') {
           sceneStore.notification?.warning({
             title: '无法重命名',
             content: '场景根节点不能重命名',
@@ -191,7 +191,7 @@
         break
       }
       case 'duplicate-object': {
-        const sourceData = sceneStore.currentObjectData
+        const sourceData = sceneStore.selectedObjectData
         if (!sourceData || sourceData.type === 'scene') {
           sceneStore.notification?.warning({
             title: '无法复制',
@@ -235,8 +235,8 @@
         break
       }
       case 'delete-object': {
-        const name = sceneStore.currentObjectData?.name ?? ''
-        const childCount = sceneStore.currentObjectData?.childrenIds?.length || 0
+        const name = sceneStore.selectedObjectData?.name ?? ''
+        const childCount = sceneStore.selectedObjectData?.childrenIds?.length || 0
         sceneStore.dialogProvider?.warning({
           title: '警告',
           content: `确认删除 "${name}"? 它的 ${childCount} 个子对象也会被删除。`,
@@ -294,7 +294,7 @@
   }, { immediate: true })
 
   const tabs = computed(() => {
-    const currentType = sceneStore.currentObjectData?.type
+    const currentType = sceneStore.selectedObjectData?.type
     const isMesh = currentType === 'mesh'
     const isHelper = currentType === 'helper'
     const isScene = currentType === 'scene'
@@ -626,7 +626,7 @@
         </template>
         <!-- 属性面板内容 -->
         <component v-if="tab.requiresSelection === false" :is="tab.component" />
-        <component v-else-if="sceneStore.currentObjectData" :is="tab.component" />
+        <component v-else-if="sceneStore.selectedObjectData" :is="tab.component" />
         <n-empty v-else description="未选择对象" />
       </n-tab-pane>
     </template>
